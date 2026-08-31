@@ -21,7 +21,7 @@ Modern, estetik ve yapay zeka destekli masaüstü görev ve alışkanlık takip 
 Uygulama **akıllı otomatik kurulum (self-healing)** desteğine sahiptir:
 
 1. **⚡ Tek Tıkla Masaüstü Kısayolu:**
-   - Klasördeki **`Kısayol Oluşturucu.vbs`** dosyasına çift tıklayın. Siyah konsol penceresi açılmadan, özel simgesiyle birlikte masaüstünüze bir kısayol oluşturulur.
+   - Klasördeki **`Kısayol Oluşturucu.vbs`** dosyasına çift tıklayın. Masaüstünüze bir kısayol oluşturulur.
 2. **🧩 Otomatik Kütüphane Yükleme:**
    - Gerekli Python kütüphaneleri (`customtkinter`, `matplotlib`, `pillow`, `pystray`) bilgisayarınızda eksikse, uygulama ilk açılışta bunu otomatik olarak tespit eder ve **tek tıkla arka planda kendisi indirip kurar**.
 3. **💻 Manuel Kurulum (İsteğe Bağlı):**
