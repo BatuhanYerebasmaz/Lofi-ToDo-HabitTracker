@@ -16,21 +16,18 @@ Modern, estetik ve yapay zeka destekli masaüstü görev ve alışkanlık takip 
 
 ---
 
-## 🚀 Kurulum
+## 🚀 Hızlı Başlangıç & Kurulum
 
-1. **Gereksinimleri Yükleyin:**
+Uygulama **akıllı otomatik kurulum (self-healing)** desteğine sahiptir:
+
+1. **⚡ Tek Tıkla Masaüstü Kısayolu:**
+   - Klasördeki **`Kısayol Oluşturucu.vbs`** dosyasına çift tıklayın. Siyah konsol penceresi açılmadan, özel simgesiyle birlikte masaüstünüze bir kısayol oluşturulur.
+2. **🧩 Otomatik Kütüphane Yükleme:**
+   - Gerekli Python kütüphaneleri (`customtkinter`, `matplotlib`, `pillow`, `pystray`) bilgisayarınızda eksikse, uygulama ilk açılışta bunu otomatik olarak tespit eder ve **tek tıkla arka planda kendisi indirip kurar**.
+3. **💻 Manuel Kurulum (İsteğe Bağlı):**
    ```bash
    pip install -r requirements.txt
-   ```
-
-2. **Masaüstü Kısayolu Oluşturun (İsteğe Bağlı):**
-   - Klasördeki **`Kısayol Oluşturucu.vbs`** dosyasına çift tıklayarak siyah konsol penceresi açılmadan, sessizce masaüstünüze özel simgesiyle birlikte kısayol ekleyebilirsiniz.
-
-3. **Uygulamayı Başlatın:**
-   ```bash
    python ToDoList.py
-   # veya doğrudan:
-   baslat.bat
    ```
 
 ---
