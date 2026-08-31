@@ -1,0 +1,16 @@
+# Kişisel Veri ve Kayıt Klasörü (Kullanıcıya Özel)
+data/
+data.json
+data.json.bak
+data.json.tmp
+
+# Python Önbellek Dosyaları
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Windows Kısayolları ve Geçici Dosyalar
+*.lnk
+Thumbs.db
+desktop.ini
