@@ -1922,12 +1922,14 @@ class SettingsWindow(ctk.CTkToplevel):
         play_button_sound()
         self.parent.settings["ai_interval"] = val
         self.parent.save_data()
+        self.parent._schedule_tasks_independently(force_reset=True)
 
     def on_target_tasks_change(self):
         play_button_sound()
         selected = [t for t, var in self.task_check_vars.items() if var.get()]
         self.parent.settings["ai_target_tasks"] = selected
         self.parent.save_data()
+        self.parent._schedule_tasks_independently(force_reset=False)
 
     def trigger_test_roast(self):
         play_button_sound()
@@ -1975,6 +1977,7 @@ class HabitTrackerApp(ctk.CTk):
         self.efektiflik_records = {}
         self.task_snooze_counts = {}
         self.today_dismissed_tasks = set()
+        self.task_scheduled_times = {}
         self.settings = {
             "mode": "light",
             "light_theme": "Latte & Şeftali",
@@ -2910,39 +2913,31 @@ class HabitTrackerApp(ctk.CTk):
             check_date -= datetime.timedelta(days=1)
         return days
 
-    def trigger_batch_notifications(self, task_list=None, is_test=False, force_snooze_count=None):
-        """Yapılmamış tüm görevleri 3-4'lü gruplar halinde 1.8 sn aralıklarla ekrana getirir, kalanları 90 sn (1.5 dk) sonraya planlar."""
-        if task_list is not None:
-            tasks_to_process = task_list
-        else:
-            target_tasks = self.settings.get("ai_target_tasks", self.tasks)
-            if not target_tasks:
-                target_tasks = self.tasks
-            dismissed = getattr(self, "today_dismissed_tasks", set())
-            tasks_to_process = [
-                t for t in target_tasks
-                if not self.get_task_state(self.today, t) and (is_test or t not in dismissed)
-            ]
+    def _schedule_tasks_independently(self, force_reset=False):
+        """Tüm hedef görevler için seçilen süre (örn: 45 dk) sonrasına yayılan bağımsız rastgele zamanlar belirler."""
+        interval_str = self.settings.get("ai_interval", "45 Dk")
+        base_minutes = {
+            "15 Dk": 15, "30 Dk": 30, "45 Dk": 45,
+            "1 Saat": 60, "2 Saat": 120
+        }.get(interval_str, 45)
 
-        if not tasks_to_process:
-            if is_test and self.tasks:
-                tasks_to_process = list(self.tasks)[:4]
-            else:
-                return
+        target_tasks = self.settings.get("ai_target_tasks", self.tasks)
+        if not target_tasks:
+            target_tasks = self.tasks
 
-        # Aynı döngüde en fazla 3-4 görev aç
-        max_batch_size = 4
-        current_batch = tasks_to_process[:max_batch_size]
-        remaining_tasks = tasks_to_process[max_batch_size:]
+        now_time = time.time()
+        base_sec = base_minutes * 60
 
-        # Mevcut gruptaki her görevi 1.8 saniye (1800 ms) farkla ekranın farklı yerlerinde aç
-        for i, t_name in enumerate(current_batch):
-            delay_ms = i * 1800
-            self.after(delay_ms, lambda t=t_name: self.trigger_single_ai_notification(t, is_test=is_test, force_snooze_count=force_snooze_count))
+        shuffled = list(target_tasks)
+        random.shuffle(shuffled)
 
-        # Eğer geriye kalan yapılmamış görevler varsa, 90 saniye (1.5 dakika) sonra sonraki grubu tetikle
-        if remaining_tasks:
-            self.after(90000, lambda: self.trigger_batch_notifications(task_list=remaining_tasks, is_test=is_test, force_snooze_count=force_snooze_count))
+        cumulative_gap = 0
+        for task_name in shuffled:
+            # Görev için henüz zaman atanmamışsa veya zorunlu sıfırlama istendiyse
+            if force_reset or task_name not in self.task_scheduled_times or self.task_scheduled_times[task_name] < (now_time - 86400):
+                gap = random.randint(1, 4) * 60 if cumulative_gap == 0 else random.randint(2, 6) * 60
+                cumulative_gap += gap
+                self.task_scheduled_times[task_name] = now_time + base_sec + cumulative_gap
 
     def trigger_single_ai_notification(self, task_name, is_test=False, force_snooze_count=None):
         """Tek bir görev için arka planda AI roast üretip popup açar."""
@@ -2954,7 +2949,7 @@ class HabitTrackerApp(ctk.CTk):
 
         days_missed = self.get_task_missed_days(task_name)
         pers = self.settings.get("ai_personality", "Sert & Direkt")
-        model = self.settings.get("ai_model", "Dahili Motor (Yerel/Hızlı)")
+        model = self.settings.get("ai_model", "Dahili Baskıcı AI Motoru (Yerel/Hızlı)")
         c_prompt = self.settings.get("ai_custom_prompt", "")
 
         def _worker():
@@ -2970,11 +2965,17 @@ class HabitTrackerApp(ctk.CTk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def trigger_ai_notification(self, specific_task=None, is_test=False, force_snooze_count=None):
-        """Tek bir görevi veya yapılmamış tüm görevlerin bildirim akışını başlatır."""
+        """Test amaçlı veya tek bir görevi ekrana getirir."""
         if specific_task:
             self.trigger_single_ai_notification(specific_task, is_test=is_test, force_snooze_count=force_snooze_count)
-        else:
-            self.trigger_batch_notifications(is_test=is_test, force_snooze_count=force_snooze_count)
+            return
+
+        target_tasks = self.settings.get("ai_target_tasks", self.tasks)
+        if not target_tasks:
+            target_tasks = self.tasks
+
+        chosen = random.choice(list(target_tasks)) if target_tasks else "Örnek Görev"
+        self.trigger_single_ai_notification(chosen, is_test=is_test, force_snooze_count=force_snooze_count)
 
     def _show_ai_popup(self, task_name, message, force_snooze_count=None):
         theme = self.get_theme()
@@ -2985,27 +2986,35 @@ class HabitTrackerApp(ctk.CTk):
         self.save_data()
 
     def check_ai_notifications(self):
-        """30 saniyede bir çalışan sıfır CPU yükümlü arka plan bildirim denetleyicisi."""
+        """Her görevin kendi bağımsız zamanı geldiğinde aralıklı ve rastgele bildirim atmasını denetler."""
         try:
             if self.settings.get("ai_notifications_enabled", True):
-                interval_str = self.settings.get("ai_interval", "30 Dk")
-                interval_minutes = {
+                now_time = time.time()
+                self._schedule_tasks_independently(force_reset=False)
+
+                target_tasks = self.settings.get("ai_target_tasks", self.tasks)
+                dismissed = getattr(self, "today_dismissed_tasks", set())
+
+                interval_str = self.settings.get("ai_interval", "45 Dk")
+                base_min = {
                     "15 Dk": 15, "30 Dk": 30, "45 Dk": 45,
                     "1 Saat": 60, "2 Saat": 120
-                }.get(interval_str, 30)
+                }.get(interval_str, 45)
 
-                last_time = self.settings.get("last_ai_notification_time", 0)
-                now_time = time.time()
+                for task_name in list(target_tasks):
+                    sched_time = self.task_scheduled_times.get(task_name, 0)
+                    if sched_time > 0 and now_time >= sched_time:
+                        # Bu görevin sonraki hatırlatma zamanını planla (temel süre + rastgele +/- sapma)
+                        jitter_sec = random.randint(-int(base_min * 0.15) * 60, int(base_min * 0.25) * 60)
+                        self.task_scheduled_times[task_name] = now_time + (base_min * 60) + jitter_sec
 
-                if now_time - last_time >= (interval_minutes * 60):
-                    target_tasks = self.settings.get("ai_target_tasks", self.tasks)
-                    today_uncompleted = [t for t in target_tasks if not self.get_task_state(self.today, t)]
-                    if today_uncompleted:
-                        self.trigger_ai_notification()
+                        # Eğer görev hala yapılmadıysa ve bugün kapatılmadıysa bildirimi tek başına aç
+                        if not self.get_task_state(self.today, task_name) and task_name not in dismissed:
+                            self.trigger_single_ai_notification(task_name)
         except Exception as e:
             print(f"AI bildirim kontrol hatası: {e}")
 
-        self.after(30000, self.check_ai_notifications)
+        self.after(20000, self.check_ai_notifications)
 
 
 # ============================================================
