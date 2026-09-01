@@ -2503,9 +2503,6 @@ class HabitTrackerApp(ctk.CTk):
                 self.shield_badge.configure(fg_color=theme["card_alt"])
                 self.shield_lbl.configure(text_color=theme.get("efektiflik_color", "#957DC7"))
 
-                self.total_xp_badge.configure(fg_color=theme["card_alt"])
-                self.total_xp_lbl.configure(text_color=theme.get("moral_color", "#D98A48"))
-
         # Mode switch
         self.mode_switch.configure(
             fg_color=theme["switch_off"], progress_color=theme["switch_on"],
@@ -2607,23 +2604,13 @@ class HabitTrackerApp(ctk.CTk):
 
         # 2. Kalkan (Shield)
         self.shield_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
-        self.shield_badge.pack(side="left", padx=(0, 6))
+        self.shield_badge.pack(side="left")
         self.shield_lbl = ctk.CTkLabel(
             self.shield_badge, text="🛡️ 1 Kalkan",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.get("efektiflik_color", "#957DC7")
         )
         self.shield_lbl.pack(padx=8, pady=3)
-
-        # 3. Toplam XP
-        self.total_xp_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
-        self.total_xp_badge.pack(side="left")
-        self.total_xp_lbl = ctk.CTkLabel(
-            self.total_xp_badge, text="✨ 0 XP",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=theme.get("moral_color", "#D98A48")
-        )
-        self.total_xp_lbl.pack(padx=8, pady=3)
 
         # Sağ üst
         self.right_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
@@ -2800,9 +2787,6 @@ class HabitTrackerApp(ctk.CTk):
             if hasattr(self, "shield_lbl"):
                 freezes = self.settings.get("streak_freezes", 1)
                 self.shield_lbl.configure(text=f"🛡️ {freezes} Kalkan" if freezes > 0 else "🛡️ Kalkan Yok")
-
-            if hasattr(self, "total_xp_lbl"):
-                self.total_xp_lbl.configure(text=f"✨ {lvl_info['total_xp']} XP")
 
     # ---------- ULTRA-HIZLI VE YUMUŞAK PASTEL AYLIK TABLO ----------
     def render_table(self):
