@@ -9,7 +9,8 @@ REQUIRED_PACKAGES = {
     "customtkinter": "customtkinter>=5.2.0",
     "matplotlib": "matplotlib>=3.7.0",
     "PIL": "pillow>=10.0.0",
-    "pystray": "pystray>=0.19.5"
+    "pystray": "pystray>=0.19.5",
+    "tkinterdnd2": "tkinterdnd2>=0.3.0"
 }
 
 missing_packages = []
@@ -49,11 +50,13 @@ if missing_packages:
 
 import customtkinter as ctk
 import tkinter as tk
+from tkinter import filedialog, messagebox
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from PIL import Image, ImageDraw, ImageTk, ImageOps
 import datetime
 import calendar
 import json
@@ -64,7 +67,14 @@ import socket
 import winsound
 import webbrowser
 import time
-from tkinter import filedialog
+import re
+import shutil
+
+try:
+    from tkinterdnd2 import TkinterDnD, DND_FILES
+    HAS_TKDND = True
+except Exception:
+    HAS_TKDND = False
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -76,7 +86,6 @@ os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
 _old_root_data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
 if os.path.exists(_old_root_data) and not os.path.exists(DATA_FILE):
     try:
-        import shutil
         shutil.move(_old_root_data, DATA_FILE)
     except Exception:
         pass
@@ -89,9 +98,6 @@ TURKISH_MONTHS = {
 
 SHORT_DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Pzr"]
 TURKISH_DAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-
-import ctypes
-import threading
 
 SOUNDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sounds")
 
@@ -242,16 +248,16 @@ class SoundEngine:
             cls._channel_index = (cls._channel_index + 1) % cls._NUM_CHANNELS
             ch = f"snd_poly_{cls._channel_index}"
 
-        try:
-            winmm = ctypes.windll.winmm
-            if cls._channel_files.get(ch) != file_path:
-                winmm.mciSendStringW(f"close {ch}", None, 0, 0)
-                winmm.mciSendStringW(f'open "{file_path}" type waveaudio alias {ch}', None, 0, 0)
-                cls._channel_files[ch] = file_path
+            try:
+                winmm = ctypes.windll.winmm
+                if cls._channel_files.get(ch) != file_path:
+                    winmm.mciSendStringW(f"close {ch}", None, 0, 0)
+                    winmm.mciSendStringW(f'open "{file_path}" type waveaudio alias {ch}', None, 0, 0)
+                    cls._channel_files[ch] = file_path
 
-            winmm.mciSendStringW(f"play {ch} from 0", None, 0, 0)
-        except Exception:
-            pass
+                winmm.mciSendStringW(f"play {ch} from 0", None, 0, 0)
+            except Exception:
+                pass
 
 
 SoundEngine.init_engine()
@@ -371,8 +377,6 @@ def get_level_info(xp):
 # ============================================================
 import urllib.request
 import urllib.error
-import subprocess
-from PIL import Image, ImageDraw, ImageTk
 import pystray
 
 ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "ToDo.ico")
@@ -1381,7 +1385,6 @@ class NotificationPopup(ctk.CTkToplevel):
             self.resizable(False, False)
             self.attributes("-topmost", True)
             self.configure(fg_color=theme["bg"])
-            self.protocol("WM_DELETE_WINDOW", self._on_snooze)
 
             self.update_idletasks()
             sw = self.winfo_screenwidth()
@@ -1446,7 +1449,7 @@ class NotificationPopup(ctk.CTkToplevel):
             play_notification_sound()
             self.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
-        self._auto_close_job = self.after(30000, self._on_snooze)
+        self._auto_close_job = self.after(30000, self._on_timeout_close)
 
     def _cancel_auto_close(self):
         if hasattr(self, "_auto_close_job") and self._auto_close_job:
@@ -1455,6 +1458,11 @@ class NotificationPopup(ctk.CTkToplevel):
             except Exception:
                 pass
             self._auto_close_job = None
+
+    def _on_timeout_close(self):
+        """Kullanıcı 30 sn işlem yapmadığında bildirim penceresini sessizce kapatır."""
+        self._cancel_auto_close()
+        self.destroy()
 
     def destroy(self):
         self._cancel_auto_close()
@@ -1670,23 +1678,77 @@ class StickyWidget(ctk.CTkToplevel):
     def render_tasks(self):
         if not hasattr(self, "scroll_frame") or not self.scroll_frame.winfo_exists():
             return
+
+        theme = self.parent.get_theme()
+        today = self.parent.today
+
+        if not hasattr(self, "task_rows"):
+            self.task_rows = {}
+
+        current_tasks = self.parent.tasks or []
+        rows_valid = (
+            list(current_tasks) == list(self.task_rows.keys())
+            and all(info.get("target") == self.parent.get_task_target(t)
+                    and info["btn"].winfo_exists() and info["lbl"].winfo_exists()
+                    for t, info in self.task_rows.items())
+        )
+
+        if not current_tasks:
+            self.task_rows = {}
+            for w in self.scroll_frame.winfo_children():
+                try:
+                    w.destroy()
+                except Exception:
+                    pass
+            ctk.CTkLabel(
+                self.scroll_frame, text="Henüz görev eklenmemiş",
+                font=ctk.CTkFont(family="Segoe UI", size=11), text_color=theme["text_secondary"]
+            ).pack(pady=25)
+            done, total = self.parent.get_today_progress()
+            self.progress_lbl.configure(text=f"{done}/{total}")
+            return
+
+        if rows_valid:
+            # In-place hızlı ve titreşimsiz güncelleme
+            for task in current_tasks:
+                target = self.parent.get_task_target(task)
+                is_done = self.parent.get_task_state(today, task)
+                row_info = self.task_rows[task]
+                btn = row_info["btn"]
+                lbl = row_info["lbl"]
+
+                if target > 1:
+                    cnt = self.parent.get_task_count(today, task)
+                    badge_text = f"✓{target}" if is_done else f"{cnt}/{target}"
+                    badge_color = theme.get("done", "#789262") if is_done else theme["btn_primary"]
+                    btn.configure(
+                        text=badge_text, fg_color=badge_color,
+                        text_color="#FFFFFF" if is_done else theme["text"]
+                    )
+                else:
+                    chk_text = "✓" if is_done else " "
+                    chk_color = theme.get("done", "#789262") if is_done else theme["card"]
+                    border_col = theme.get("done", "#789262") if is_done else theme.get("border", theme.get("entry_border", "#D1D5DB"))
+                    btn.configure(text=chk_text, fg_color=chk_color, border_color=border_col)
+
+                lbl.configure(
+                    font=ctk.CTkFont(family="Segoe UI", size=10, overstrike=is_done),
+                    text_color=theme["text_secondary"] if is_done else theme["text"]
+                )
+
+            done, total = self.parent.get_today_progress()
+            self.progress_lbl.configure(text=f"{done}/{total}")
+            return
+
+        # Liste değiştiyse sıfırdan oluştur
+        self.task_rows = {}
         for w in self.scroll_frame.winfo_children():
             try:
                 w.destroy()
             except Exception:
                 pass
 
-        theme = self.parent.get_theme()
-        today = self.parent.today
-
-        if not self.parent.tasks:
-            ctk.CTkLabel(
-                self.scroll_frame, text="Henüz görev eklenmemiş",
-                font=ctk.CTkFont(family="Segoe UI", size=11), text_color=theme["text_secondary"]
-            ).pack(pady=25)
-            return
-
-        for task in self.parent.tasks:
+        for task in current_tasks:
             target = self.parent.get_task_target(task)
             is_done = self.parent.get_task_state(today, task)
 
@@ -1708,6 +1770,7 @@ class StickyWidget(ctk.CTkToplevel):
                 )
                 cnt_btn.pack(side="left", padx=(6, 4))
                 cnt_btn.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
+                action_btn = cnt_btn
             else:
                 chk_text = "✓" if is_done else " "
                 chk_color = theme.get("done", "#789262") if is_done else theme["card"]
@@ -1722,6 +1785,7 @@ class StickyWidget(ctk.CTkToplevel):
                 )
                 chk_btn.pack(side="left", padx=(6, 4))
                 chk_btn.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
+                action_btn = chk_btn
 
             # Görev Adı
             lbl = ctk.CTkLabel(
@@ -1732,6 +1796,8 @@ class StickyWidget(ctk.CTkToplevel):
             lbl.pack(side="left", fill="x", expand=True, padx=(2, 6))
             lbl.bind("<Button-1>", lambda e, t=task: self.on_task_click(t))
             lbl.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
+
+            self.task_rows[task] = {"btn": action_btn, "lbl": lbl, "target": target}
 
         # Başlıktaki ilerleme sayısını güncelle
         done, total = self.parent.get_today_progress()
@@ -1845,8 +1911,10 @@ class DailyNoteTooltip:
         if not text and not images:
             return
 
+        mood = note_data.get("mood", "") if isinstance(note_data, dict) else ""
         wd = d_obj.weekday()
-        day_str = f"📅 {d_obj.day} {TURKISH_MONTHS.get(d_obj.month, '')} {d_obj.year}, {TURKISH_DAYS[wd]}"
+        prefix = f"{mood} " if mood else "📅 "
+        day_str = f"{prefix}{d_obj.day} {TURKISH_MONTHS.get(d_obj.month, '')} {d_obj.year}, {TURKISH_DAYS[wd]}"
 
         self.tip_window = tw = tk.Toplevel(self.canvas)
         tw.wm_overrideredirect(True)
@@ -1900,8 +1968,19 @@ class DailyNoteTooltip:
             self.current_ds = None
 
 
+_POLAROID_CACHE = {}
+
+
 def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
-    """Resmi polaroid çerçevesi içine alıp washi tape ve doğal bir eğim açısıyla döndürür."""
+    """Resmi polaroid çerçevesi içine alıp washi tape ve doğal bir eğim açısıyla döndürür (Önbellekli / Ultra-Hızlı)."""
+    try:
+        mtime = os.path.getmtime(img_path) if os.path.exists(img_path) else 0
+    except Exception:
+        mtime = 0
+    cache_key = (img_path, width, height, angle, mtime)
+    if cache_key in _POLAROID_CACHE:
+        return _POLAROID_CACHE[cache_key]
+
     border_lr = 7
     border_top = 7
     border_bottom = 20
@@ -1914,8 +1993,12 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
     draw = ImageDraw.Draw(polaroid)
 
     try:
-        user_img = Image.open(img_path).convert("RGBA")
-        user_img = user_img.resize((width, height), Image.Resampling.LANCZOS)
+        with Image.open(img_path) as raw_img:
+            raw_img = ImageOps.exif_transpose(raw_img)
+            # Hızlı thumbnail boyutu
+            raw_img.thumbnail((width * 2, height * 2), Image.Resampling.BILINEAR)
+            user_img = raw_img.convert("RGBA")
+        user_img = user_img.resize((width, height), Image.Resampling.BILINEAR)
         polaroid.paste(user_img, (border_lr, border_top))
     except Exception:
         draw.rectangle([border_lr, border_top, border_lr + width, border_top + height], fill=(220, 220, 220, 255))
@@ -1932,17 +2015,27 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
 
     # Yumuşak kenarlı doğal açı döndürmesi
     if angle != 0:
-        polaroid = polaroid.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+        polaroid = polaroid.rotate(angle, resample=Image.Resampling.BILINEAR, expand=True)
 
+    _POLAROID_CACHE[cache_key] = polaroid
     return polaroid
 
 
 class DailyNoteModal(ctk.CTkToplevel):
-    """Tek Yapraklı Defter & Açılı Polaroid Fotoğraflı Günlük Sayfası."""
+    """Tek Yapraklı Defter & Açılı Polaroid Fotoğraflı Sevimli Günlük Sayfası."""
+    CURRENT_INSTANCE = None
     _ANGLES = [-4, 3, -3, 5, -2, 4, -5]
 
     def __init__(self, parent, date_obj):
+        if DailyNoteModal.CURRENT_INSTANCE is not None:
+            try:
+                DailyNoteModal.CURRENT_INSTANCE.destroy()
+            except Exception:
+                pass
+
         super().__init__(parent)
+        DailyNoteModal.CURRENT_INSTANCE = self
+
         self.parent = parent
         self.date_obj = date_obj
         self.ds = date_obj.strftime("%Y-%m-%d")
@@ -1960,97 +2053,160 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.note_images = []
 
         self.title("📖 Günün Defter Sayfası" if self.is_today else "📖 Defter Arşivi")
-        self.geometry("620x650")
-        self.resizable(False, False)
-        self.transient(parent)
-        self.attributes("-topmost", True)
-        self.configure(fg_color=self.theme["bg"])
 
+        px, py = 100, 100
         try:
-            px = parent.winfo_x() + (parent.winfo_width() - 620) // 2
-            py = parent.winfo_y() + (parent.winfo_height() - 650) // 2
-            self.geometry(f"+{max(20, px)}+{max(20, py)}")
+            px = parent.winfo_x() + (parent.winfo_width() - 640) // 2
+            py = parent.winfo_y() + (parent.winfo_height() - 700) // 2
         except Exception:
             pass
 
+        self.geometry(f"640x700+{max(20, px)}+{max(20, py)}")
+        self.resizable(False, False)
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.configure(fg_color=self.theme["bg"])
+
+        self._drag_start_x = 0
+        self._drag_start_y = 0
+
         self.setup_ui()
+        self.after(5, self.apply_round_corners)
+        self.after(50, self.apply_round_corners)
+        self.after(200, self.apply_round_corners)
+        self.bind("<Map>", lambda e: self.apply_round_corners())
+
         if self.is_today:
             self.bind("<Control-s>", lambda e: self.save_note())
+            self.setup_drag_drop()
+
+    def apply_round_corners(self):
+        """Pencere ve tüm üst taşıyıcı katmanlarının köşelerini Windows GDI ile pürüzsüz yuvarlatır."""
+        try:
+            w = self.winfo_width()
+            h = self.winfo_height()
+            if w <= 10 or h <= 10:
+                w, h = 640, 700
+            r = 36  # Yumuşak kavis yarıçapı
+            child_hwnd = self.winfo_id()
+            if child_hwnd:
+                hwnds_to_round = [child_hwnd]
+                p_hwnd = ctypes.windll.user32.GetParent(child_hwnd)
+                if p_hwnd:
+                    hwnds_to_round.append(p_hwnd)
+                a_hwnd = ctypes.windll.user32.GetAncestor(child_hwnd, 2)
+                if a_hwnd and a_hwnd not in hwnds_to_round:
+                    hwnds_to_round.append(a_hwnd)
+
+                for h_item in hwnds_to_round:
+                    try:
+                        rgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, r, r)
+                        ctypes.windll.user32.SetWindowRgn(h_item, rgn, True)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     def setup_ui(self):
         theme = self.theme
         wd = self.date_obj.weekday()
         formatted_date = f"{self.date_obj.day} {TURKISH_MONTHS.get(self.date_obj.month, '')} {self.date_obj.year}, {TURKISH_DAYS[wd]}"
 
-        # Defter Sayfası Taban Rengi (Kraft / Fildişi Kağıt)
+        # Defter Sayfası Renk Paleti (Kraft / Fildişi Kağıt & Pastel Tonlar)
         paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
-        paper_border = "#E8DCCB" if not self.is_dark else "#362D27"
+        paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
         text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
         sub_text_color = "#7D6B5D" if not self.is_dark else "#A8988B"
+        margin_color = "#F0C4B4" if not self.is_dark else "#543C30"
+        tape_color = "#E8C2A8" if not self.is_dark else "#4F3C32"
 
         # Dış Defter Alanı
-        outer_frame = ctk.CTkFrame(self, fg_color="transparent")
-        outer_frame.pack(fill="both", expand=True, padx=12, pady=12)
+        self.outer_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.outer_frame.pack(fill="both", expand=True, padx=12, pady=12)
 
         # 1. Sol Spiral Şeridi (Defter Telleri)
         self.spiral_canvas = tk.Canvas(
-            outer_frame, width=28, bg=self.theme["bg"], highlightthickness=0
+            self.outer_frame, width=28, bg=self.theme["bg"], highlightthickness=0
         )
         self.spiral_canvas.pack(side="left", fill="y", padx=(0, 2))
         self.draw_spiral_rings()
 
         # 2. Tek Yapraklı Defter Sayfası (Notebook Sheet)
-        page = ctk.CTkFrame(
-            outer_frame, fg_color=paper_bg, corner_radius=14,
+        self.page = ctk.CTkFrame(
+            self.outer_frame, fg_color=paper_bg, corner_radius=16,
             border_width=2, border_color=paper_border
         )
-        page.pack(side="left", fill="both", expand=True)
+        self.page.pack(side="left", fill="both", expand=True)
+        page = self.page
 
-        # Sayfa İçi Üst Başlık (Tarih & Rozet)
+        # Üstte Sevimli Washi Tape (Dekoratif Bant)
+        tape_canvas = tk.Canvas(page, width=90, height=10, bg=paper_bg, highlightthickness=0)
+        tape_canvas.pack(pady=(4, 0))
+        tape_canvas.create_rectangle(0, 0, 90, 8, fill=tape_color, outline="")
+
+        # Sayfa İçi Üst Başlık (Tarih & Kapatma Butonu & Fotoğraf Butonu)
         head = ctk.CTkFrame(page, fg_color="transparent")
-        head.pack(fill="x", padx=18, pady=(16, 6))
+        head.pack(fill="x", padx=16, pady=(4, 4))
 
         title_box = ctk.CTkFrame(head, fg_color="transparent")
         title_box.pack(side="left")
 
         ctk.CTkLabel(
-            title_box, text=f"📌  {formatted_date}",
+            title_box, text=f"🗓️  {formatted_date}",
             font=ctk.CTkFont(family="Georgia", size=15, weight="bold"),
             text_color=text_color
         ).pack(anchor="w")
 
         ctk.CTkLabel(
-            title_box, text="Defter Sayfası & Günlük Notları",
+            title_box, text="📖  Defter Sayfası & Günlük Anıları",
             font=ctk.CTkFont(size=10, slant="italic"),
             text_color=sub_text_color
         ).pack(anchor="w")
 
-        # Rozet & Fotoğraf Butonu
+        # Sağ Üst Aksiyon Alanı (Fotoğraf Butonu & Özel Kapatma Çarpısı)
         action_box = ctk.CTkFrame(head, fg_color="transparent")
         action_box.pack(side="right")
 
-        badge_text = "✍️ Bugünün Sayfası" if self.is_today else "📖 Salt Okunur"
-        badge_bg = theme["btn_primary"] if self.is_today else theme["card_alt"]
-        badge_fg = theme["text"] if self.is_today else theme["text_secondary"]
-        badge = ctk.CTkFrame(action_box, fg_color=badge_bg, corner_radius=8)
-        badge.pack(side="right", padx=(8, 0))
-        ctk.CTkLabel(badge, text=badge_text, font=ctk.CTkFont(size=10, weight="bold"), text_color=badge_fg).pack(padx=8, pady=3)
+        # Özel Kapatma Tuşu (✕)
+        ctk.CTkButton(
+            action_box, text="✕", width=28, height=28, corner_radius=14,
+            fg_color=paper_border, hover_color=theme.get("btn_danger", "#EF4444"),
+            text_color=sub_text_color, font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.destroy
+        ).pack(side="right")
 
         if self.is_today:
             ctk.CTkButton(
-                action_box, text="📷 + Fotoğraf İğnele", width=120, height=28, corner_radius=8,
+                action_box, text="📷 + Fotoğraf Ekle", width=120, height=28, corner_radius=8,
                 fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
                 text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
                 command=self.add_image
-            ).pack(side="right")
+            ).pack(side="right", padx=(0, 8))
 
-        # İnce Defter Çizgisi (Kırmızı / Pastel Kenar Çizgisi)
-        margin_line = ctk.CTkFrame(page, height=1, fg_color="#E5C7B8" if not self.is_dark else "#4D3B31")
-        margin_line.pack(fill="x", padx=18, pady=(4, 10))
+        # Pencereyi Başlıktan/Sayfadan Sürükleme Desteği (Drag & Move)
+        def _start_drag(event):
+            self._drag_start_x = event.x_root - self.winfo_x()
+            self._drag_start_y = event.y_root - self.winfo_y()
 
-        # 3. Polaroid / Açılı Fotoğraflar Alanı (Scrapbook Board - Direct Canvas)
+        def _do_drag(event):
+            x = event.x_root - self._drag_start_x
+            y = event.y_root - self._drag_start_y
+            self.geometry(f"+{x}+{y}")
+
+        for w in [self.outer_frame, self.page, head, title_box, tape_canvas]:
+            try:
+                w.bind("<Button-1>", _start_drag, add="+")
+                w.bind("<B1-Motion>", _do_drag, add="+")
+            except Exception:
+                pass
+
+        # İnce Defter Çizgisi
+        margin_line = ctk.CTkFrame(page, height=1, fg_color=margin_color)
+        margin_line.pack(fill="x", padx=16, pady=(4, 6))
+
+        # 4. Polaroid / Fotoğraflar Panosu (Scrapbook Board)
         self.photo_canvas = tk.Canvas(
-            page, height=140, bg=paper_bg, highlightthickness=0
+            page, height=125, bg=paper_bg, highlightthickness=0
         )
         self.photo_canvas.pack(fill="x", padx=14, pady=(0, 6))
 
@@ -2069,14 +2225,21 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.render_polaroid_gallery()
 
-        # 4. Defter Yazı Alanı (Deftere Not Yazma)
-        txt_frame = ctk.CTkFrame(page, fg_color="transparent")
-        txt_frame.pack(fill="both", expand=True, padx=18, pady=(0, 10))
+        # 5. Defter Yazı Alanı (Handwritten Notebook Text Area)
+        txt_outer = ctk.CTkFrame(page, fg_color="transparent")
+        txt_outer.pack(fill="both", expand=True, padx=16, pady=(0, 4))
+
+        # Sol Kırmızı/Pastel Defter Kenar Çizgisi (Margin line)
+        left_margin = ctk.CTkFrame(txt_outer, width=2, fg_color=margin_color)
+        left_margin.pack(side="left", fill="y", padx=(0, 6))
+
+        txt_body = ctk.CTkFrame(txt_outer, fg_color="transparent")
+        txt_body.pack(side="left", fill="both", expand=True)
 
         self.textbox = ctk.CTkTextbox(
-            txt_frame, corner_radius=10,
+            txt_body, corner_radius=10,
             fg_color=paper_bg, border_width=1, border_color=paper_border,
-            text_color=text_color, font=ctk.CTkFont(family="Segoe UI", size=12)
+            text_color=text_color, font=ctk.CTkFont(family="Segoe Print", size=14)
         )
         self.textbox.pack(fill="both", expand=True)
         if self.note_text:
@@ -2085,17 +2248,30 @@ class DailyNoteModal(ctk.CTkToplevel):
         if not self.is_today:
             self.textbox.configure(state="disabled")
 
-        # 5. Alt Butonlar (Deftere Kaydet / Notu Yırt-Sil / Kapat)
-        btn_bar = ctk.CTkFrame(page, fg_color="transparent")
-        btn_bar.pack(fill="x", padx=18, pady=(0, 14))
+        # Yazma İstatistiği (Canlı Kelime & Karakter Sayacı)
+        stats_bar = ctk.CTkFrame(txt_body, fg_color="transparent")
+        stats_bar.pack(fill="x", pady=(2, 0))
 
+        self.stat_label = ctk.CTkLabel(
+            stats_bar, text="✍️ 0 kelime · 0 karakter",
+            font=ctk.CTkFont(size=10), text_color=sub_text_color
+        )
+        self.stat_label.pack(side="right")
+        self.update_stats()
+
+        self.textbox.bind("<KeyRelease>", lambda e: self.update_stats())
+
+        # 6. Alt Butonlar (Deftere Kaydet / Notu Sil)
         if self.is_today:
+            btn_bar = ctk.CTkFrame(page, fg_color="transparent")
+            btn_bar.pack(fill="x", padx=16, pady=(6, 12))
+
             ctk.CTkButton(
-                btn_bar, text="💾 Sayfayı Kaydet", height=34, corner_radius=10,
+                btn_bar, text="💾 Sayfayı Kaydet  (Ctrl+S)", height=34, corner_radius=10,
                 fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                 text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
                 command=self.save_note
-            ).pack(side="left", fill="x", expand=True, padx=(0, 8))
+            ).pack(side="left", fill="x", expand=True, padx=(0, 8 if (self.note_text or self.note_images) else 0))
 
             if self.note_text or self.note_images:
                 ctk.CTkButton(
@@ -2103,35 +2279,28 @@ class DailyNoteModal(ctk.CTkToplevel):
                     fg_color=theme.get("btn_danger", "#EF4444"), hover_color=theme.get("btn_danger_hover", "#DC2626"),
                     text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
                     command=self.delete_note
-                ).pack(side="left", padx=(0, 8))
+                ).pack(side="right")
 
-            ctk.CTkButton(
-                btn_bar, text="Kapat", height=34, width=80, corner_radius=10,
-                fg_color=theme["card_alt"], hover_color=theme["checkbox_border"],
-                text_color=theme["text"], font=ctk.CTkFont(size=11),
-                command=self.destroy
-            ).pack(side="right")
-        else:
-            ctk.CTkButton(
-                btn_bar, text="Kapat", height=34, corner_radius=10,
-                fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
-                command=self.destroy
-            ).pack(fill="x")
+    def update_stats(self):
+        """Kelime ve karakter sayacını canlı günceller."""
+        try:
+            txt = self.textbox.get("1.0", "end-1c").strip()
+            words = len(txt.split()) if txt else 0
+            chars = len(txt)
+            self.stat_label.configure(text=f"✍️ {words} kelime · {chars} karakter")
+        except Exception:
+            pass
 
     def draw_spiral_rings(self):
-        """Sol kenardaki gerçekçi spiral tel halkalarını çizer."""
+        """Sol kenardaki gerçekçi spiral tel halkalarını taşma yapmadan çizer."""
         self.spiral_canvas.delete("all")
-        h = 650
-        num_rings = 14
-        step = h / (num_rings + 1)
-
+        num_rings = 13
         ring_color = "#A3978C" if not self.is_dark else "#6E6258"
         ring_highlight = "#FAF4EB" if not self.is_dark else "#8C7E72"
         hole_color = "#42362C" if not self.is_dark else "#120E0C"
 
         for i in range(1, num_rings + 1):
-            cy = i * step
+            cy = 20 + i * (620 / (num_rings + 1))
             # Delik (Punch Hole)
             self.spiral_canvas.create_oval(14, cy - 4, 24, cy + 4, fill=hole_color, outline="")
             # Spiral Tel Halkası (Metal Ring Loop)
@@ -2149,22 +2318,35 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.note_images = valid_images
 
         if not self.note_images:
-            empty_msg = "Henüz fotoğraf eklenmemiş." if not self.is_today else "📌 Üstteki '📷 + Fotoğraf İğnele' butonuyla deftere polaroid fotoğraflar ekleyebilirsiniz."
             sub_col = "#7D6B5D" if not self.is_dark else "#A8988B"
-            self.photo_canvas.create_text(
-                280, 70, text=empty_msg,
-                font=("Segoe UI", 10, "italic"), fill=sub_col, anchor="center"
+            box_border = "#E8DCCB" if not self.is_dark else "#362D27"
+            
+            # Sevimli kesikli çizgili bırakma alanı (Drop Zone)
+            self.photo_canvas.create_rectangle(
+                10, 8, 550, 115, dash=(4, 4), outline=box_border, width=1.5,
+                tags="empty_drop"
             )
-            self.photo_canvas.config(scrollregion=(0, 0, 560, 140))
+            empty_msg = "📸 Fotoğraf sürükleyip bırakın veya buraya tıklayarak ekleyin" if self.is_today else "Henüz fotoğraf eklenmemiş."
+            self.photo_canvas.create_text(
+                280, 62, text=empty_msg,
+                font=("Segoe UI", 10, "italic"), fill=sub_col, anchor="center",
+                tags="empty_drop"
+            )
+            if self.is_today:
+                self.photo_canvas.tag_bind("empty_drop", "<Button-1>", lambda e: self.add_image())
+                self.photo_canvas.tag_bind("empty_drop", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
+                self.photo_canvas.tag_bind("empty_drop", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
+
+            self.photo_canvas.config(scrollregion=(0, 0, 560, 125))
             return
 
         x_cursor = 18
-        y_center = 70
+        y_center = 62
 
         for idx, img_path in enumerate(self.note_images):
             try:
                 angle = self._ANGLES[idx % len(self._ANGLES)]
-                polaroid_img = create_tilted_polaroid(img_path, width=115, height=85, angle=angle)
+                polaroid_img = create_tilted_polaroid(img_path, width=110, height=80, angle=angle)
                 if not polaroid_img:
                     continue
 
@@ -2217,7 +2399,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.photo_canvas.tag_bind("del_item", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
         self.photo_canvas.tag_bind("del_item", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
 
-        self.photo_canvas.config(scrollregion=(0, 0, max(560, x_cursor + 20), 140))
+        self.photo_canvas.config(scrollregion=(0, 0, max(560, x_cursor + 20), 125))
 
     def add_image(self):
         files = filedialog.askopenfilenames(
@@ -2227,8 +2409,60 @@ class DailyNoteModal(ctk.CTkToplevel):
         )
         if not files:
             return
-        os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
+        self._import_image_files(files)
+
+    def setup_drag_drop(self):
+        """TkinterDnD ile pencereye ve bileşenlere sürükle-bırak desteğini bağlar."""
+        if not HAS_TKDND or not self.is_today:
+            return
+        
+        widgets_to_bind = [self]
+        if hasattr(self, "outer_frame"):
+            widgets_to_bind.append(self.outer_frame)
+        if hasattr(self, "page"):
+            widgets_to_bind.append(self.page)
+        if hasattr(self, "photo_canvas"):
+            widgets_to_bind.append(self.photo_canvas)
+        if hasattr(self, "textbox"):
+            widgets_to_bind.append(self.textbox)
+            if hasattr(self.textbox, "_textbox"):
+                widgets_to_bind.append(self.textbox._textbox)
+
+        for w in widgets_to_bind:
+            try:
+                w.drop_target_register(DND_FILES)
+                w.dnd_bind('<<Drop>>', self._on_tkdnd_drop)
+            except Exception:
+                pass
+
+    def _on_tkdnd_drop(self, event):
+        """TkinterDnD bırakma olayı — dosyaları ayıklayıp galeriyi günceller."""
+        if not self.is_today:
+            return
+        try:
+            raw_data = getattr(event, "data", None)
+            if not raw_data:
+                return
+            # Windows dosya yollarını (boşluklu/boşluksuz/parantezli) regex ile güvenle ayıkla
+            matches = re.findall(r'\{([^}]+)\}|(\S+)', str(raw_data))
+            VALID_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+            paths = []
+            for m in matches:
+                p = m[0] if m[0] else m[1]
+                p = os.path.normpath(p.strip().strip('"').strip("'"))
+                ext = os.path.splitext(p)[1].lower()
+                if ext in VALID_EXTS and os.path.isfile(p):
+                    paths.append(p)
+            if paths:
+                self._import_image_files(paths)
+        except Exception as e:
+            print(f"Sürükle-bırak hatası: {e}")
+
+    def _import_image_files(self, files):
+        """Dosya listesini notes_media'ya kopyalar, galeriyi anında günceller."""
         import shutil
+        os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
+        added = False
         for f in files:
             try:
                 ext = os.path.splitext(f)[1]
@@ -2236,8 +2470,12 @@ class DailyNoteModal(ctk.CTkToplevel):
                 dest_path = os.path.join(NOTES_MEDIA_DIR, unique_name)
                 shutil.copy2(f, dest_path)
                 self.note_images.append(dest_path)
+                added = True
             except Exception as e:
                 print(f"Fotoğraf kopyalanamadı: {e}")
+
+        if not added:
+            return
 
         # Anında otomatik kaydet ve canlı güncelle
         curr_text = self.textbox.get("1.0", "end-1c").strip()
@@ -2256,6 +2494,13 @@ class DailyNoteModal(ctk.CTkToplevel):
     def remove_image(self, img_path):
         if img_path in self.note_images:
             self.note_images.remove(img_path)
+
+            # Fiziksel dosyayı diskten temizle
+            try:
+                if os.path.exists(img_path) and os.path.abspath(img_path).startswith(os.path.abspath(NOTES_MEDIA_DIR)):
+                    os.remove(img_path)
+            except Exception:
+                pass
 
             # Anında otomatik kaydet ve canlı güncelle
             curr_text = self.textbox.get("1.0", "end-1c").strip()
@@ -2297,65 +2542,25 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.destroy()
 
     def delete_note(self):
-        self.parent.daily_notes.pop(self.ds, None)
-        self.parent.save_data()
-        self.parent.render_table()
-        play_button_sound()
-        self.destroy()
-
-    def add_image(self):
-        files = filedialog.askopenfilenames(
-            title="Fotoğraf Seç",
-            filetypes=[("Resim Dosyaları", "*.png *.jpg *.jpeg *.webp *.bmp *.gif")]
-        )
-        if not files:
-            return
-        os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
-        import shutil
-        for f in files:
+        for img_p in list(self.note_images):
             try:
-                ext = os.path.splitext(f)[1]
-                unique_name = f"{self.ds}_{int(time.time()*1000)}_{random.randint(100,999)}{ext}"
-                dest_path = os.path.join(NOTES_MEDIA_DIR, unique_name)
-                shutil.copy2(f, dest_path)
-                self.note_images.append(dest_path)
-            except Exception as e:
-                print(f"Fotoğraf kopyalanamadı: {e}")
-        self.render_image_thumbnails()
-
-    def remove_image(self, index):
-        if 0 <= index < len(self.note_images):
-            self.note_images.pop(index)
-            self.render_image_thumbnails()
-
-    def open_full_image(self, img_path):
-        if os.path.exists(img_path):
-            try:
-                os.startfile(img_path)
+                if os.path.exists(img_p) and os.path.abspath(img_p).startswith(os.path.abspath(NOTES_MEDIA_DIR)):
+                    os.remove(img_p)
             except Exception:
-                webbrowser.open(img_path)
+                pass
 
-    def save_note(self):
-        text = self.textbox.get("1.0", "end-1c").strip()
-        if text or self.note_images:
-            self.parent.daily_notes[self.ds] = {
-                "text": text,
-                "images": self.note_images
-            }
-        else:
-            self.parent.daily_notes.pop(self.ds, None)
-
-        self.parent.save_data()
-        self.parent.render_table()
-        play_notification_sound()
-        self.destroy()
-
-    def delete_note(self):
         self.parent.daily_notes.pop(self.ds, None)
         self.parent.save_data()
         self.parent.render_table()
         play_button_sound()
         self.destroy()
+
+    def destroy(self):
+        if DailyNoteModal.CURRENT_INSTANCE is self:
+            DailyNoteModal.CURRENT_INSTANCE = None
+        super().destroy()
+
+
 
 
 # ============================================================
@@ -3104,17 +3309,27 @@ class SettingsWindow(ctk.CTkToplevel):
                 cur_model = self.model_var.get()
                 ans = query_gemini(key, cur_model, "Kısaca 'Tamam' yaz.")
                 def _done():
-                    self.gemini_test_btn.configure(state="normal")
-                    if ans:
-                        self.gemini_status_lbl.configure(text="✅ Bağlantı Başarılı!", text_color="#10B981")
-                    else:
-                        self.gemini_status_lbl.configure(text="❌ Geçersiz API Anahtarı!", text_color="#EF4444")
+                    if not self.winfo_exists():
+                        return
+                    try:
+                        self.gemini_test_btn.configure(state="normal")
+                        if ans:
+                            self.gemini_status_lbl.configure(text="✅ Bağlantı Başarılı!", text_color="#10B981")
+                        else:
+                            self.gemini_status_lbl.configure(text="❌ Geçersiz API Anahtarı!", text_color="#EF4444")
+                    except Exception:
+                        pass
                 self.after(0, _done)
             except Exception:
-                self.after(0, lambda: [
-                    self.gemini_test_btn.configure(state="normal"),
-                    self.gemini_status_lbl.configure(text="❌ Bağlantı Hatası!", text_color="#EF4444")
-                ])
+                def _fail():
+                    if not self.winfo_exists():
+                        return
+                    try:
+                        self.gemini_test_btn.configure(state="normal")
+                        self.gemini_status_lbl.configure(text="❌ Bağlantı Hatası!", text_color="#EF4444")
+                    except Exception:
+                        pass
+                self.after(0, _fail)
 
         threading.Thread(target=_test, daemon=True).start()
 
@@ -3126,14 +3341,19 @@ class SettingsWindow(ctk.CTkToplevel):
             models = scan_local_ai_models()
 
             def _update():
-                self.parent.settings["detected_ai_models"] = models
-                self.model_menu.configure(values=models)
-                if self.model_var.get() not in models:
-                    self.model_var.set(models[0])
-                    self.parent.settings["ai_model"] = models[0]
-                self.parent.save_data()
-                self.scan_btn.configure(text="✓ Güncellendi", state="normal")
-                self.after(2000, lambda: self.scan_btn.configure(text="🔍 Lokali Tara"))
+                if not self.winfo_exists():
+                    return
+                try:
+                    self.parent.settings["detected_ai_models"] = models
+                    self.model_menu.configure(values=models)
+                    if self.model_var.get() not in models:
+                        self.model_var.set(models[0])
+                        self.parent.settings["ai_model"] = models[0]
+                    self.parent.save_data()
+                    self.scan_btn.configure(text="✓ Güncellendi", state="normal")
+                    self.after(2000, lambda: self.scan_btn.configure(text="🔍 Lokali Tara") if self.winfo_exists() else None)
+                except Exception:
+                    pass
 
             self.after(0, _update)
 
@@ -3188,14 +3408,25 @@ class SettingsWindow(ctk.CTkToplevel):
         self.parent.trigger_ai_notification(is_test=True, force_snooze_count=1)
 
 
-# ============================================================
-#  ANA UYGULAMA
-# ============================================================
-class HabitTrackerApp(ctk.CTk):
+if HAS_TKDND:
+    class _AppBase(ctk.CTk, TkinterDnD.DnDWrapper):
+        pass
+else:
+    class _AppBase(ctk.CTk):
+        pass
+
+
+class HabitTrackerApp(_AppBase):
     CURRENT_INSTANCE = None
 
     def __init__(self):
         super().__init__()
+        if HAS_TKDND:
+            try:
+                self.TkdndVersion = TkinterDnD._require(self)
+            except Exception as e:
+                print(f"TkinterDnD init error: {e}")
+
         HabitTrackerApp.CURRENT_INSTANCE = self
 
         self.title("Görev & Alışkanlık Takip Programı")
@@ -3304,7 +3535,6 @@ class HabitTrackerApp(ctk.CTk):
         # Kayan Mini Widget & Global Hotkey (Ctrl+Shift+T)
         self.sticky_widget = None
         self.hotkey_mgr = GlobalHotkeyManager(self.toggle_from_hotkey)
-        SoundEngine.init_engine()
 
         # Tema modu
         mode = self.settings.get("mode", "light")
@@ -3324,11 +3554,30 @@ class HabitTrackerApp(ctk.CTk):
         self.check_ai_notifications()
 
     # ---------- VERİ YÖNETİMİ ----------
+    def _cleanup_orphaned_media(self):
+        """Silinmiş notlardan arta kalan sahipsiz fotoğrafları diskten temizler."""
+        try:
+            used_images = set()
+            for n_val in getattr(self, "daily_notes", {}).values():
+                if isinstance(n_val, dict):
+                    for p in n_val.get("images", []):
+                        used_images.add(os.path.normpath(p))
+            if os.path.exists(NOTES_MEDIA_DIR):
+                for f_name in os.listdir(NOTES_MEDIA_DIR):
+                    f_path = os.path.normpath(os.path.join(NOTES_MEDIA_DIR, f_name))
+                    if os.path.isfile(f_path) and f_path not in used_images:
+                        try:
+                            os.remove(f_path)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
     def load_data(self):
+        loaded = False
         if os.path.exists(DATA_FILE):
             # Oturum başında güvenli yedek al (Tek seferlik)
             try:
-                import shutil
                 shutil.copy2(DATA_FILE, DATA_FILE + ".bak")
             except Exception:
                 pass
@@ -3342,25 +3591,29 @@ class HabitTrackerApp(ctk.CTk):
                     self.efektiflik_records = data.get("efektiflik_records", {})
                     self.daily_notes = data.get("daily_notes", {})
                     self.settings = data.get("settings", self.settings)
-                    return
+                    loaded = True
             except Exception as e:
                 print(f"Veri yükleme hatası: {e}")
 
-        # Yedekten kurtarma (varsa)
-        bak_file = DATA_FILE + ".bak"
-        if os.path.exists(bak_file):
-            try:
-                with open(bak_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.tasks = data.get("tasks", self.tasks)
-                    self.task_targets = data.get("task_targets", getattr(self, "task_targets", {}))
-                    self.records = data.get("records", {})
-                    self.moral_records = data.get("moral_records", {})
-                    self.efektiflik_records = data.get("efektiflik_records", {})
-                    self.daily_notes = data.get("daily_notes", {})
-                    self.settings = data.get("settings", self.settings)
-            except Exception:
-                pass
+        # Yedekten kurtarma (ana veri dosyası okunamadıysa)
+        if not loaded:
+            bak_file = DATA_FILE + ".bak"
+            if os.path.exists(bak_file):
+                try:
+                    with open(bak_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        self.tasks = data.get("tasks", self.tasks)
+                        self.task_targets = data.get("task_targets", getattr(self, "task_targets", {}))
+                        self.records = data.get("records", {})
+                        self.moral_records = data.get("moral_records", {})
+                        self.efektiflik_records = data.get("efektiflik_records", {})
+                        self.daily_notes = data.get("daily_notes", {})
+                        self.settings = data.get("settings", self.settings)
+                except Exception:
+                    pass
+
+        # Sahipsiz medya dosyalarını temizle (Storage Cleanup)
+        self._cleanup_orphaned_media()
 
     def save_data(self):
         self._max_streak_dirty = True
@@ -3398,6 +3651,8 @@ class HabitTrackerApp(ctk.CTk):
         val = self.get_task_val(date_obj, task_name)
         if target <= 1:
             return bool(val)
+        if isinstance(val, bool):
+            return val
         if isinstance(val, (int, float)):
             return val >= target
         return bool(val)
@@ -3408,6 +3663,8 @@ class HabitTrackerApp(ctk.CTk):
         val = self.get_task_val(date_obj, task_name)
         if target <= 1:
             return 1 if val else 0
+        if isinstance(val, bool):
+            return target if val else 0
         if isinstance(val, (int, float)):
             return min(target, max(0, int(val)))
         return target if val else 0
@@ -3425,7 +3682,13 @@ class HabitTrackerApp(ctk.CTk):
             is_completed = new_val
             is_just_completed = new_val
         else:
-            curr_count = curr_val if isinstance(curr_val, (int, float)) else (target if curr_val is True else 0)
+            if isinstance(curr_val, bool):
+                curr_count = target if curr_val else 0
+            elif isinstance(curr_val, (int, float)):
+                curr_count = int(curr_val)
+            else:
+                curr_count = 0
+
             if curr_count >= target:
                 new_val = 0
                 is_completed = False
@@ -3450,7 +3713,12 @@ class HabitTrackerApp(ctk.CTk):
             new_val = False
             is_completed = False
         else:
-            curr_count = curr_val if isinstance(curr_val, (int, float)) else (target if curr_val is True else 0)
+            if isinstance(curr_val, bool):
+                curr_count = target if curr_val else 0
+            elif isinstance(curr_val, (int, float)):
+                curr_count = int(curr_val)
+            else:
+                curr_count = 0
             new_val = max(0, curr_count - 1)
             is_completed = (new_val >= target)
 
@@ -3475,27 +3743,53 @@ class HabitTrackerApp(ctk.CTk):
     def calculate_total_xp(self):
         """Tüm tamamlanan görevler, sayaç adımları ve bonuslarla toplam XP'yi hesaplar."""
         total_xp = int(self.settings.get("bonus_xp", 0))
+        today_ds = self.today.strftime("%Y-%m-%d")
+
         for ds, day_rec in self.records.items():
             if not isinstance(day_rec, dict):
                 continue
+
+            # O gün için geçerli görev listesi
+            if ds == today_ds:
+                tracked_tasks = list(self.tasks)
+            else:
+                # Geçmiş günlerde o gün kaydı bulunan görevler
+                tracked_tasks = [t for t in self.tasks if t in day_rec]
+                if not tracked_tasks:
+                    tracked_tasks = [k for k in day_rec.keys() if isinstance(k, str)]
+
             day_done = 0
-            day_total = len(self.tasks)
-            for t in self.tasks:
+            day_total = len(tracked_tasks)
+
+            all_day_keys = set(tracked_tasks) | set(day_rec.keys())
+            for t in all_day_keys:
                 target = self.get_task_target(t)
                 val = day_rec.get(t, False)
+                is_task_done = False
                 if target <= 1:
                     if val:
                         total_xp += 15
-                        day_done += 1
+                        is_task_done = True
                 else:
-                    cnt = int(val) if isinstance(val, (int, float)) else (target if val is True else 0)
+                    if isinstance(val, bool):
+                        cnt = target if val else 0
+                    elif isinstance(val, (int, float)):
+                        cnt = int(val)
+                    else:
+                        cnt = 0
+
                     if cnt >= target:
                         total_xp += 15
-                        day_done += 1
+                        is_task_done = True
                     elif cnt > 0:
                         total_xp += ((cnt * 15) // target)
+
+                if t in tracked_tasks and is_task_done:
+                    day_done += 1
+
             if day_total > 0 and day_done == day_total:
                 total_xp += 50
+
         return max(0, total_xp)
 
     def calculate_streak(self):
@@ -3808,7 +4102,7 @@ class HabitTrackerApp(ctk.CTk):
         # ─── ÜST PANEL (GRAFİKLER) ───
         self.top_frame = ctk.CTkFrame(self, corner_radius=16, fg_color=theme["card"])
         self.top_frame.pack(side="top", fill="x", padx=15, pady=(8, 4))
-        self.top_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        self.top_frame.grid_columnconfigure((0, 1, 2), weight=1, uniform="top_cards")
 
         # 1. Grafik Kartı (Haftalık Günler)
         self.chart1_frame = ctk.CTkFrame(self.top_frame, fg_color=theme["chart_bg"], corner_radius=12)
@@ -4516,6 +4810,15 @@ class HabitTrackerApp(ctk.CTk):
 
     def open_daily_note_modal(self, d_obj):
         self.hide_note_tooltip()
+        if DailyNoteModal.CURRENT_INSTANCE is not None:
+            try:
+                if getattr(DailyNoteModal.CURRENT_INSTANCE, "date_obj", None) == d_obj:
+                    DailyNoteModal.CURRENT_INSTANCE.lift()
+                    DailyNoteModal.CURRENT_INSTANCE.focus_force()
+                    return
+                DailyNoteModal.CURRENT_INSTANCE.destroy()
+            except Exception:
+                DailyNoteModal.CURRENT_INSTANCE = None
         DailyNoteModal(self, d_obj)
 
     def show_note_tooltip(self, event, d_obj, note_data):
@@ -4695,6 +4998,7 @@ class HabitTrackerApp(ctk.CTk):
         self.chart1_title_lbl.configure(text=title)
 
     def navigate_month(self, delta):
+        """Yalnızca üstteki 'Aylık Odak' donut grafiğinin ayını bağımsız olarak değiştirir."""
         play_button_sound()
         m = self.chart_month + delta
         y = self.chart_year
@@ -4706,15 +5010,11 @@ class HabitTrackerApp(ctk.CTk):
             y -= 1
         self.chart_month = m
         self.chart_year = y
-        self.table_month = m
-        self.table_year = y
         self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
-        if hasattr(self, "table_month_lbl"):
-            self.table_month_lbl.configure(text=f"{TURKISH_MONTHS[m]} {y}")
-        self.render_table()
         self.update_charts()
 
     def navigate_table_month(self, delta):
+        """Yalnızca alttaki ana takip tablosunun/takviminin ayını bağımsız olarak değiştirir."""
         play_button_sound()
         m = getattr(self, "table_month", self.today.month) + delta
         y = getattr(self, "table_year", self.today.year)
@@ -4726,13 +5026,9 @@ class HabitTrackerApp(ctk.CTk):
             y -= 1
         self.table_month = m
         self.table_year = y
-        self.chart_month = m
-        self.chart_year = y
-        self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
         if hasattr(self, "table_month_lbl"):
             self.table_month_lbl.configure(text=f"{TURKISH_MONTHS[m]} {y}")
         self.render_table()
-        self.update_charts()
 
     def reset_to_current_month(self):
         play_button_sound()
@@ -4829,9 +5125,14 @@ class HabitTrackerApp(ctk.CTk):
                 pass
 
     def _do_restore(self):
-        # Ana pencere açılırken mini widget'ı kapat
-        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
-            self.sticky_widget.withdraw()
+        # Eğer Kayan Mini Widget açıksa kapat
+        if hasattr(self, "sticky_widget") and self.sticky_widget:
+            try:
+                self.sticky_widget.destroy()
+            except Exception:
+                pass
+            self.sticky_widget = None
+
         self.deiconify()
         self.state('normal')
         self.lift()
@@ -4839,7 +5140,16 @@ class HabitTrackerApp(ctk.CTk):
         self.apply_app_icon()
         self.update_clock()
         self.attributes("-topmost", True)
-        self.after(250, lambda: self.attributes("-topmost", False))
+        self.after(200, lambda: self.attributes("-topmost", False))
+
+        # Windows Native API ile pencereyi kesin olarak öne çıkar
+        try:
+            hwnd = self.winfo_id()
+            p_hwnd = ctypes.windll.user32.GetParent(hwnd) or hwnd
+            ctypes.windll.user32.ShowWindow(p_hwnd, 9)  # SW_RESTORE = 9
+            ctypes.windll.user32.SetForegroundWindow(p_hwnd)
+        except Exception:
+            pass
 
     def quit_app(self):
         """Uygulamayı ve tüm arka plan süreçlerini anında ve tamamen sonlandırır."""
@@ -4999,32 +5309,20 @@ class HabitTrackerApp(ctk.CTk):
 SINGLE_INSTANCE_PORT = 52849
 
 
-def ensure_single_instance(app_instance):
-    """Uygulamanın birden fazla açılmasını engeller; kısayoldan tekrar açıldığında arka plandakini öne getirir."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def acquire_single_instance_lock():
+    """Uygulama açılırken soketi anında kilitler; başka kopya varsa öne getirip çıkış yapar."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
-        s.listen(5)
-
-        def _listen():
-            while True:
-                try:
-                    conn, _ = s.accept()
-                    conn.settimeout(1.0)
-                    data = conn.recv(1024)
-                    if b"RESTORE" in data:
-                        app_instance.after(0, app_instance._do_restore)
-                    conn.close()
-                except Exception:
-                    break
-
-        threading.Thread(target=_listen, daemon=True).start()
-        return s
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        server.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        server.listen(5)
+        return server
     except OSError:
+        # Zaten çalışan bir kopya var, öne getir komutu gönder ve anında sonlan
         try:
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.settimeout(0.5)
+            client.settimeout(1.0)
             client.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
             client.sendall(b"RESTORE")
             client.close()
@@ -5033,21 +5331,32 @@ def ensure_single_instance(app_instance):
         sys.exit(0)
 
 
+def start_single_instance_listener(server_sock, app_instance):
+    """Arka plandaki tekil soket üzerinden gelen RESTORE isteklerini dinler."""
+    def _listen():
+        while True:
+            try:
+                conn, _ = server_sock.accept()
+                conn.settimeout(1.0)
+                data = conn.recv(1024)
+                if b"RESTORE" in data:
+                    app_instance.after(0, app_instance._do_restore)
+                conn.close()
+            except Exception:
+                break
+
+    threading.Thread(target=_listen, daemon=True).start()
+
+
 # ============================================================
 #  BAŞLAT
 # ============================================================
 if __name__ == "__main__":
-    # 1. Hızlı Soket Kontrolü (Uygulama zaten açıksa 1 ms'de öne getirip GUI yüklemeden anında sonlan)
-    try:
-        quick_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        quick_sock.settimeout(0.5)
-        quick_sock.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
-        quick_sock.sendall(b"RESTORE")
-        quick_sock.close()
-        sys.exit(0)
-    except (OSError, socket.timeout):
-        pass
+    # 1. Soket kilidini GUI başlamadan 0. milisaniyede al (Race condition önleyici)
+    lock_sock = acquire_single_instance_lock()
 
+    # 2. Ana uygulamayı başlat
     app = HabitTrackerApp()
-    app.lock_socket = ensure_single_instance(app)
+    app.lock_socket = lock_sock
+    start_single_instance_listener(lock_sock, app)
     app.mainloop()
