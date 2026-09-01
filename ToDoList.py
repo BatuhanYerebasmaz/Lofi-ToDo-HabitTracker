@@ -2559,6 +2559,17 @@ class HabitTrackerApp(ctk.CTk):
 
         self.chart3_title_lbl.configure(text_color=theme["text"])
 
+        # Stat cards
+        if hasattr(self, "stat_card1"):
+            for sc in (self.stat_card1, self.stat_card2, self.stat_card3):
+                sc.configure(fg_color=theme["card_alt"])
+            self.stat_c1_title.configure(text_color=theme["text_secondary"])
+            self.stat_c2_title.configure(text_color=theme["text_secondary"])
+            self.stat_c3_title.configure(text_color=theme["text_secondary"])
+            self.stat_c1_val.configure(text_color=theme.get("accent", "#FB7185"))
+            self.stat_c2_val.configure(text_color=theme.get("done", "#789262"))
+            self.stat_c3_val.configure(text_color=theme.get("efektiflik_color", "#957DC7"))
+
         # Bottom Frame
         self.bottom_frame.configure(fg_color=theme["card"])
 
@@ -2710,7 +2721,7 @@ class HabitTrackerApp(ctk.CTk):
             command=lambda: self.navigate_week(1))
         self.chart1_next_btn.pack(side="right")
 
-        # 2. Grafik Kartı (Aylık Haftalık Oranlar)
+        # 2. Grafik Kartı (Aylık Tamamlanma - Donut Grafik)
         self.chart2_frame = ctk.CTkFrame(self.top_frame, fg_color=theme["chart_bg"], corner_radius=12)
         self.chart2_frame.grid(row=0, column=1, padx=6, pady=6, sticky="nsew")
 
@@ -2725,7 +2736,7 @@ class HabitTrackerApp(ctk.CTk):
         self.chart2_prev_btn.pack(side="left")
 
         self.chart2_title_lbl = ctk.CTkLabel(
-            chart2_header, text=f"Haftalık Oranlar ({TURKISH_MONTHS[self.chart_month]})",
+            chart2_header, text=f"Aylık Odak ({TURKISH_MONTHS[self.chart_month]})",
             font=ctk.CTkFont(size=11, weight="bold"), text_color=theme["text"])
         self.chart2_title_lbl.pack(side="left", expand=True)
 
@@ -2736,7 +2747,7 @@ class HabitTrackerApp(ctk.CTk):
             command=lambda: self.navigate_month(1))
         self.chart2_next_btn.pack(side="right")
 
-        # 3. Grafik Kartı (Aylık Dağılım Pasta)
+        # 3. Kart (🏆 Alışkanlık & Başarı Özeti)
         self.chart3_frame = ctk.CTkFrame(self.top_frame, fg_color=theme["chart_bg"], corner_radius=12)
         self.chart3_frame.grid(row=0, column=2, padx=6, pady=6, sticky="nsew")
 
@@ -2744,9 +2755,38 @@ class HabitTrackerApp(ctk.CTk):
         chart3_header.pack(fill="x", padx=8, pady=(6, 2))
 
         self.chart3_title_lbl = ctk.CTkLabel(
-            chart3_header, text=f"Aylık Dağılım ({TURKISH_MONTHS[self.chart_month]})",
+            chart3_header, text="🏆 Alışkanlık Özeti",
             font=ctk.CTkFont(size=11, weight="bold"), text_color=theme["text"])
         self.chart3_title_lbl.pack(fill="x", expand=True, pady=1)
+
+        self.stats_cards_container = ctk.CTkFrame(self.chart3_frame, fg_color="transparent")
+        self.stats_cards_container.pack(fill="both", expand=True, padx=8, pady=(4, 6))
+        self.stats_cards_container.grid_rowconfigure((0, 1, 2), weight=1)
+        self.stats_cards_container.grid_columnconfigure(0, weight=1)
+
+        # 1. Mini Kart: En Uzun Seri
+        self.stat_card1 = ctk.CTkFrame(self.stats_cards_container, fg_color=theme["card_alt"], corner_radius=8)
+        self.stat_card1.grid(row=0, column=0, sticky="nsew", pady=2)
+        self.stat_c1_title = ctk.CTkLabel(self.stat_card1, text="👑 En Uzun Seri", font=ctk.CTkFont(size=10), text_color=theme["text_secondary"])
+        self.stat_c1_title.pack(side="left", padx=10)
+        self.stat_c1_val = ctk.CTkLabel(self.stat_card1, text="🔥 0 Gün", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.get("accent", "#FB7185"))
+        self.stat_c1_val.pack(side="right", padx=10)
+
+        # 2. Mini Kart: Bu Ay Tamamlanan
+        self.stat_card2 = ctk.CTkFrame(self.stats_cards_container, fg_color=theme["card_alt"], corner_radius=8)
+        self.stat_card2.grid(row=1, column=0, sticky="nsew", pady=2)
+        self.stat_c2_title = ctk.CTkLabel(self.stat_card2, text="⚡ Bu Ay Başarı", font=ctk.CTkFont(size=10), text_color=theme["text_secondary"])
+        self.stat_c2_title.pack(side="left", padx=10)
+        self.stat_c2_val = ctk.CTkLabel(self.stat_card2, text="0 Görev (%0)", font=ctk.CTkFont(size=11, weight="bold"), text_color=theme.get("done", "#789262"))
+        self.stat_c2_val.pack(side="right", padx=10)
+
+        # 3. Mini Kart: En İstikrarlı Alışkanlık
+        self.stat_card3 = ctk.CTkFrame(self.stats_cards_container, fg_color=theme["card_alt"], corner_radius=8)
+        self.stat_card3.grid(row=2, column=0, sticky="nsew", pady=2)
+        self.stat_c3_title = ctk.CTkLabel(self.stat_card3, text="🎯 En İstikrarlı", font=ctk.CTkFont(size=10), text_color=theme["text_secondary"])
+        self.stat_c3_title.pack(side="left", padx=10)
+        self.stat_c3_val = ctk.CTkLabel(self.stat_card3, text="-", font=ctk.CTkFont(size=10, weight="bold"), text_color=theme.get("efektiflik_color", "#957DC7"))
+        self.stat_c3_val.pack(side="right", padx=10)
 
         # ─── ALT PANEL (ULTRA-HIZLI CANVAS TABLO) ───
         self.bottom_frame = ctk.CTkFrame(self, corner_radius=16, fg_color=theme["card"])
@@ -3237,124 +3277,133 @@ class HabitTrackerApp(ctk.CTk):
             self._current_table_cursor = desired_cursor
             self.table_canvas.configure(cursor=desired_cursor)
 
-    # ---------- GRAFİKLER (OPTİMİZE EDİLMİŞ) ----------
+    # ---------- GRAFİKLER & DASHBOARD (MODERN VE DOLGUN) ----------
     def setup_charts(self):
-        self.fig1, self.ax1 = plt.subplots(figsize=(3.2, 1.9), dpi=80)
-        self.fig1.subplots_adjust(left=0.14, right=0.96, top=0.82, bottom=0.18)
+        # 1. Grafik: Haftalık Trend (Bar)
+        self.fig1, self.ax1 = plt.subplots(figsize=(3.4, 1.8), dpi=80)
+        self.fig1.subplots_adjust(left=0.12, right=0.96, top=0.86, bottom=0.20)
         self.canvas1 = FigureCanvasTkAgg(self.fig1, master=self.chart1_frame)
         self.canvas1.get_tk_widget().pack(fill="both", expand=True, padx=2, pady=2)
 
-        self.fig2, self.ax2 = plt.subplots(figsize=(3.2, 1.9), dpi=80)
-        self.fig2.subplots_adjust(left=0.16, right=0.96, top=0.82, bottom=0.18)
+        # 2. Grafik: Aylık Tamamlanma (Donut)
+        self.fig2, self.ax2 = plt.subplots(figsize=(3.4, 1.8), dpi=80)
+        self.fig2.subplots_adjust(left=0.05, right=0.95, top=0.92, bottom=0.08)
         self.canvas2 = FigureCanvasTkAgg(self.fig2, master=self.chart2_frame)
         self.canvas2.get_tk_widget().pack(fill="both", expand=True, padx=2, pady=2)
 
-        self.fig3, self.ax3 = plt.subplots(figsize=(3.2, 1.9), dpi=80)
-        self.fig3.subplots_adjust(left=0.08, right=0.92, top=0.82, bottom=0.08)
-        self.canvas3 = FigureCanvasTkAgg(self.fig3, master=self.chart3_frame)
-        self.canvas3.get_tk_widget().pack(fill="both", expand=True, padx=2, pady=2)
-
-    def get_month_weeks_data(self, year, month):
-        num_days = calendar.monthrange(year, month)[1]
-        weeks_completion = []
-        week_labels = []
-        day = 1
-        week_num = 1
-        while day <= num_days:
-            week_end = min(day + 6, num_days)
-            week_days_count = week_end - day + 1
-            total_possible = len(self.tasks) * week_days_count
-            completed = 0
-            for d in range(day, week_end + 1):
-                ds = datetime.date(year, month, d).strftime("%Y-%m-%d")
-                dr = self.records.get(ds, {})
-                completed += sum(1 for t in self.tasks if dr.get(t, False))
-            rate = (completed / total_possible * 100) if total_possible > 0 else 0
-            weeks_completion.append(rate)
-            week_labels.append(f"{week_num}.H")
-            day += 7
-            week_num += 1
-        return week_labels, weeks_completion
+    def get_max_streak(self):
+        """Kullanıcının geçmişten bugüne kaydettiği en uzun ardışık gün serisini hesaplar."""
+        active_dates = []
+        for ds_str in self.records:
+            try:
+                d_obj = datetime.date.fromisoformat(ds_str)
+                if any(self.get_task_state(d_obj, t) for t in self.tasks):
+                    active_dates.append(d_obj)
+            except Exception:
+                pass
+        if not active_dates:
+            return 0
+        active_dates = sorted(set(active_dates))
+        max_s = 1
+        curr_s = 1
+        for i in range(1, len(active_dates)):
+            if active_dates[i] - active_dates[i - 1] == datetime.timedelta(days=1):
+                curr_s += 1
+                if curr_s > max_s:
+                    max_s = curr_s
+            else:
+                curr_s = 1
+        return max_s
 
     def update_charts(self):
         theme = self.get_theme()
 
-        # ─── GRAFİK 1: Seçili Haftanın Günleri ───
+        # ─── GRAFİK 1: Seçili Haftanın Günleri (Modern Bar Grafik) ───
         week_dates = [self.selected_monday + datetime.timedelta(days=i) for i in range(7)]
         daily_counts = []
         for d_obj in week_dates:
-            dr = self.records.get(d_obj.strftime("%Y-%m-%d"), {})
-            daily_counts.append(sum(1 for t in self.tasks if dr.get(t, False)))
+            daily_counts.append(sum(1 for t in self.tasks if self.get_task_state(d_obj, t)))
 
         self.ax1.clear()
         self.fig1.patch.set_facecolor(theme["chart_bg"])
         self.ax1.set_facecolor(theme["chart_bg"])
 
+        max_val = max(len(self.tasks), 1)
         bars = self.ax1.bar(SHORT_DAYS, daily_counts, color=theme["chart_bar1"],
-                            width=0.5, edgecolor=theme["chart_bg"], linewidth=0.5)
+                            width=0.52, edgecolor=theme["chart_bg"], linewidth=0.5)
+
         for i, d_obj in enumerate(week_dates):
+            cnt = daily_counts[i]
             if d_obj == self.today:
                 bars[i].set_color(theme["done"])
-                bars[i].set_edgecolor(theme["chart_bar1"])
+                bars[i].set_edgecolor(theme.get("accent", "#FB7185"))
                 bars[i].set_linewidth(1.5)
+            if cnt > 0:
+                self.ax1.text(i, cnt + (max_val * 0.04), str(cnt),
+                              ha="center", va="bottom", fontsize=7.5, fontweight="bold",
+                              color=theme["text"])
 
-        # Y eksenini daima 0'dan başlat ve tam sayı adımları kullan (Asla -'ye düşmez)
-        max_y = max(len(self.tasks), 1)
-        self.ax1.set_ylim(0, max_y)
-        self.ax1.yaxis.set_major_locator(ticker.MaxNLocator(integer=True, nbins=min(max_y + 1, 5)))
-
-        self.ax1.tick_params(axis="both", colors=theme["chart_text"], labelsize=7)
+        self.ax1.set_ylim(0, max_val + max(1, int(max_val * 0.22)))
+        self.ax1.yaxis.set_major_locator(ticker.MaxNLocator(integer=True, nbins=min(max_val + 1, 4)))
+        self.ax1.tick_params(axis="both", colors=theme["chart_text"], labelsize=7.5)
         self.ax1.spines["top"].set_visible(False)
         self.ax1.spines["right"].set_visible(False)
         self.ax1.spines["left"].set_color(theme["chart_grid"])
         self.ax1.spines["bottom"].set_color(theme["chart_grid"])
         self.canvas1.draw_idle()
 
-        # ─── GRAFİK 2: Seçili Ayın Haftalık Oranları ───
-        wl, wr = self.get_month_weeks_data(self.chart_year, self.chart_month)
-
-        self.ax2.clear()
-        self.fig2.patch.set_facecolor(theme["chart_bg"])
-        self.ax2.set_facecolor(theme["chart_bg"])
-        self.ax2.bar(wl, wr, color=theme["chart_bar2"], width=0.45,
-                     edgecolor=theme["chart_bg"], linewidth=0.5)
-        self.ax2.set_ylim(0, 100)
-        self.ax2.tick_params(axis="both", colors=theme["chart_text"], labelsize=7)
-        self.ax2.spines["top"].set_visible(False)
-        self.ax2.spines["right"].set_visible(False)
-        self.ax2.spines["left"].set_color(theme["chart_grid"])
-        self.ax2.spines["bottom"].set_color(theme["chart_grid"])
-        self.canvas2.draw_idle()
-
-        # ─── GRAFİK 3: Seçili Ayın Pasta Grafiği ───
+        # ─── GRAFİK 2: Seçili Ayın Donut Grafiği (Modern Halka) ───
         cy, cm = self.chart_year, self.chart_month
         nd = calendar.monthrange(cy, cm)[1]
         total_possible = len(self.tasks) * nd
         total_done = 0
-        for d in range(1, nd + 1):
-            ds = datetime.date(cy, cm, d).strftime("%Y-%m-%d")
-            dr = self.records.get(ds, {})
-            total_done += sum(1 for t in self.tasks if dr.get(t, False))
-        total_remain = max(0, total_possible - total_done)
+        task_counts = {t: 0 for t in self.tasks}
 
-        self.ax3.clear()
-        self.fig3.patch.set_facecolor(theme["chart_bg"])
-        self.ax3.set_facecolor(theme["chart_bg"])
+        for d in range(1, nd + 1):
+            d_obj = datetime.date(cy, cm, d)
+            for t in self.tasks:
+                if self.get_task_state(d_obj, t):
+                    total_done += 1
+                    task_counts[t] += 1
+
+        total_remain = max(0, total_possible - total_done)
+        pct = int(total_done / total_possible * 100) if total_possible > 0 else 0
+
+        self.ax2.clear()
+        self.fig2.patch.set_facecolor(theme["chart_bg"])
+        self.ax2.set_facecolor(theme["chart_bg"])
 
         if total_done == 0 and total_remain == 0:
             sizes = [0, 1]
-            explode = (0, 0)
         else:
             sizes = [total_done, total_remain]
-            explode = (0.06, 0)
 
         wedge_colors = [theme["chart_pie_done"], theme["chart_pie_remain"]]
-        self.ax3.pie(sizes, colors=wedge_colors,
-                     autopct="%1.0f%%" if total_done > 0 else "",
-                     startangle=140, explode=explode, shadow=False,
-                     textprops={"color": theme["chart_text"], "fontsize": 8, "weight": "bold"},
-                     wedgeprops={"edgecolor": theme["chart_bg"], "linewidth": 1.5})
-        self.canvas3.draw_idle()
+        self.ax2.pie(sizes, colors=wedge_colors,
+                     startangle=90, counterclock=False,
+                     wedgeprops=dict(width=0.36, edgecolor=theme["chart_bg"], linewidth=1.5))
+
+        # Ortadaki Yüzde & Bilgi Metni
+        self.ax2.text(0, 0.08, f"%{pct}", ha="center", va="center",
+                      fontsize=12, fontweight="bold", color=theme["text"])
+        self.ax2.text(0, -0.22, f"{total_done}/{total_possible}", ha="center", va="center",
+                      fontsize=7, fontweight="bold", color=theme["text_secondary"])
+
+        self.canvas2.draw_idle()
+
+        # ─── 3. KART: Alışkanlık & Başarı İstatistikleri ───
+        if hasattr(self, "stat_c1_val"):
+            max_s = self.get_max_streak()
+            self.stat_c1_val.configure(text=f"🔥 {max_s} Gün" if max_s > 0 else "0 Gün")
+            self.stat_c2_val.configure(text=f"{total_done} Görev (%{pct})")
+
+            # En çok yapılan görev
+            if task_counts and total_done > 0:
+                top_task, top_cnt = max(task_counts.items(), key=lambda x: x[1])
+                t_display = top_task if len(top_task) <= 15 else (top_task[:14] + "..")
+                self.stat_c3_val.configure(text=f"{t_display} ({top_cnt}x)" if top_cnt > 0 else "-")
+            else:
+                self.stat_c3_val.configure(text="-")
 
     def navigate_week(self, delta):
         play_button_sound()
@@ -3387,8 +3436,7 @@ class HabitTrackerApp(ctk.CTk):
             y -= 1
         self.chart_month = m
         self.chart_year = y
-        self.chart2_title_lbl.configure(text=f"Haftalık Oranlar ({TURKISH_MONTHS[m]} {y})")
-        self.chart3_title_lbl.configure(text=f"Aylık Dağılım ({TURKISH_MONTHS[m]} {y})")
+        self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
         self.update_charts()
 
     # ---------- SİSTEM TEPSİSİ & ARKA PLAN MODU ----------
