@@ -1972,7 +1972,7 @@ _POLAROID_CACHE = {}
 
 
 def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
-    """Resmi polaroid çerçevesi içine alıp washi tape ve doğal bir eğim açısıyla döndürür (Önbellekli / Ultra-Hızlı)."""
+    """Resmi polaroid çerçevesi içine oranını bozmadan alır, washi tape ve doğal bir açıyla döndürür."""
     try:
         mtime = os.path.getmtime(img_path) if os.path.exists(img_path) else 0
     except Exception:
@@ -1995,10 +1995,10 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
     try:
         with Image.open(img_path) as raw_img:
             raw_img = ImageOps.exif_transpose(raw_img)
-            # Hızlı thumbnail boyutu
-            raw_img.thumbnail((width * 2, height * 2), Image.Resampling.BILINEAR)
-            user_img = raw_img.convert("RGBA")
-        user_img = user_img.resize((width, height), Image.Resampling.BILINEAR)
+            # En boy oranını (Aspect Ratio) bozmadan merkezden akıllı kırpma ve keskin Lanczos ölçekleme
+            user_img = ImageOps.fit(raw_img, (width, height), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+            if user_img.mode != "RGBA":
+                user_img = user_img.convert("RGBA")
         polaroid.paste(user_img, (border_lr, border_top))
     except Exception:
         draw.rectangle([border_lr, border_top, border_lr + width, border_top + height], fill=(220, 220, 220, 255))
@@ -2013,9 +2013,9 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
     draw.rectangle([(card_w - tape_w) // 2, 0, (card_w + tape_w) // 2, tape_h],
                    fill=(238, 185, 145, 200))
 
-    # Yumuşak kenarlı doğal açı döndürmesi
+    # Yumuşak kenarlı doğal açı döndürmesi (Bicubic antialiasing)
     if angle != 0:
-        polaroid = polaroid.rotate(angle, resample=Image.Resampling.BILINEAR, expand=True)
+        polaroid = polaroid.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
 
     _POLAROID_CACHE[cache_key] = polaroid
     return polaroid
@@ -2346,7 +2346,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         for idx, img_path in enumerate(self.note_images):
             try:
                 angle = self._ANGLES[idx % len(self._ANGLES)]
-                polaroid_img = create_tilted_polaroid(img_path, width=110, height=80, angle=angle)
+                polaroid_img = create_tilted_polaroid(img_path, width=108, height=84, angle=angle)
                 if not polaroid_img:
                     continue
 
