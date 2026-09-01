@@ -1542,10 +1542,12 @@ class StickyWidget(ctk.CTkToplevel):
 
         self.setup_ui()
         self.bind_events()
-        self.after(30, self.apply_round_corners)
+        self.bind("<Configure>", lambda e: self.apply_round_corners())
+        self.after(10, self.apply_round_corners)
+        self.after(60, self.apply_round_corners)
 
     def apply_round_corners(self):
-        """Windows SetWindowRgn ile pencereyi tam yuvarlak keser (sivri köşe ve beyazlıkları sıfırlar)."""
+        """Windows SetWindowRgn ile hem Tk client hem OS penceresini tam yuvarlak keser (köşe beyazlıklarını sıfırlar)."""
         try:
             self.update_idletasks()
             w = self.winfo_width()
@@ -1553,10 +1555,17 @@ class StickyWidget(ctk.CTkToplevel):
             if w <= 1 or h <= 1:
                 w = 260
                 h = 340
-            hwnd = self.winfo_id()
-            # 26px ellipse çapı (13px radius)
-            rgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, 26, 26)
-            ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
+            
+            # 1. Tk Client alanı
+            hwnd_child = self.winfo_id()
+            rgn1 = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, 26, 26)
+            ctypes.windll.user32.SetWindowRgn(hwnd_child, rgn1, True)
+
+            # 2. Gerçek Win32 OS Top-level Penceresi (Parent HWND)
+            hwnd_parent = ctypes.windll.user32.GetParent(hwnd_child)
+            if hwnd_parent:
+                rgn2 = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, 26, 26)
+                ctypes.windll.user32.SetWindowRgn(hwnd_parent, rgn2, True)
         except Exception:
             pass
 
