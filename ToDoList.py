@@ -2049,11 +2049,9 @@ class DailyNoteModal(ctk.CTkToplevel):
         margin_line.pack(fill="x", padx=18, pady=(4, 10))
 
         # 3. Polaroid / Açılı Fotoğraflar Alanı (Scrapbook Board)
-        self.photo_scroll = ctk.CTkScrollableFrame(
-            page, height=140, orientation="horizontal",
-            fg_color="transparent", corner_radius=10
-        )
-        self.photo_scroll.pack(fill="x", padx=14, pady=(0, 8))
+        self.photo_box = ctk.CTkFrame(page, height=145, fg_color="transparent")
+        self.photo_box.pack(fill="x", padx=14, pady=(0, 6))
+        self.photo_box.pack_propagate(False)
 
         self.render_polaroid_gallery()
 
@@ -2130,35 +2128,44 @@ class DailyNoteModal(ctk.CTkToplevel):
 
     def render_polaroid_gallery(self):
         """Açılı (yamuk) polaroid fotoğrafları defter üzerine yerleştirir."""
-        for widget in self.photo_scroll.winfo_children():
+        for widget in self.photo_box.winfo_children():
             widget.destroy()
 
         valid_images = [p for p in self.note_images if os.path.exists(p)]
         self.note_images = valid_images
 
         if not self.note_images:
+            empty_box = ctk.CTkFrame(self.photo_box, fg_color="transparent")
+            empty_box.pack(fill="both", expand=True)
             empty_msg = "Henüz fotoğraf eklenmemiş." if not self.is_today else "📌 Üstteki '📷 + Fotoğraf İğnele' butonuyla deftere polaroid fotoğraflar ekleyebilirsiniz."
             ctk.CTkLabel(
-                self.photo_scroll, text=empty_msg,
+                empty_box, text=empty_msg,
                 font=ctk.CTkFont(size=10, slant="italic"),
                 text_color=self.theme["text_secondary"]
-            ).pack(padx=14, pady=35)
+            ).pack(expand=True, pady=30)
             self.update_idletasks()
             return
+
+        scroll = ctk.CTkScrollableFrame(
+            self.photo_box, height=140, orientation="horizontal",
+            fg_color="transparent"
+        )
+        scroll.pack(fill="both", expand=True)
 
         self._polaroid_refs = []
         for idx, img_path in enumerate(self.note_images):
             try:
                 angle = self._ANGLES[idx % len(self._ANGLES)]
-                polaroid_img = create_tilted_polaroid(img_path, width=120, height=90, angle=angle)
+                polaroid_img = create_tilted_polaroid(img_path, width=115, height=85, angle=angle)
                 if not polaroid_img:
                     continue
 
                 ctk_img = ctk.CTkImage(light_image=polaroid_img, dark_image=polaroid_img, size=polaroid_img.size)
                 self._polaroid_refs.append(ctk_img)
 
-                card = ctk.CTkFrame(self.photo_scroll, fg_color="transparent")
-                card.pack(side="left", padx=6, pady=4)
+                card = ctk.CTkFrame(scroll, fg_color="transparent", width=polaroid_img.width, height=polaroid_img.height)
+                card.pack(side="left", padx=6, pady=2)
+                card.pack_propagate(False)
 
                 btn_img = ctk.CTkButton(
                     card, text="", image=ctk_img,
@@ -2167,15 +2174,15 @@ class DailyNoteModal(ctk.CTkToplevel):
                     corner_radius=8, cursor="hand2",
                     command=lambda p=img_path: self.open_full_image(p)
                 )
-                btn_img.pack()
+                btn_img.pack(fill="both", expand=True)
 
                 if self.is_today:
                     btn_del = ctk.CTkButton(
                         card, text="✕", width=22, height=22, corner_radius=11,
-                        fg_color=self.theme.get("btn_danger", "#EF4444"), hover_color=self.theme.get("btn_danger_hover", "#DC2626"),
+                        fg_color="#EF4444", hover_color="#DC2626",
                         text_color="#FFFFFF", font=ctk.CTkFont(size=10, weight="bold"),
                         cursor="hand2",
-                        command=lambda i=idx: self.remove_image(i)
+                        command=lambda p=img_path: self.remove_image(p)
                     )
                     btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
                     btn_del.lift()
@@ -2204,14 +2211,36 @@ class DailyNoteModal(ctk.CTkToplevel):
             except Exception as e:
                 print(f"Fotoğraf kopyalanamadı: {e}")
 
+        # Anında otomatik kaydet ve canlı güncelle
+        curr_text = self.textbox.get("1.0", "end-1c").strip()
+        self.parent.daily_notes[self.ds] = {
+            "text": curr_text,
+            "images": list(self.note_images)
+        }
+        self.parent.save_data()
+        self.parent.render_table()
+
         play_button_sound()
         self.render_polaroid_gallery()
         self.lift()
         self.focus_force()
 
-    def remove_image(self, index):
-        if 0 <= index < len(self.note_images):
-            self.note_images.pop(index)
+    def remove_image(self, img_path):
+        if img_path in self.note_images:
+            self.note_images.remove(img_path)
+
+            # Anında otomatik kaydet ve canlı güncelle
+            curr_text = self.textbox.get("1.0", "end-1c").strip()
+            if curr_text or self.note_images:
+                self.parent.daily_notes[self.ds] = {
+                    "text": curr_text,
+                    "images": list(self.note_images)
+                }
+            else:
+                self.parent.daily_notes.pop(self.ds, None)
+            self.parent.save_data()
+            self.parent.render_table()
+
             play_button_sound()
             self.render_polaroid_gallery()
             self.lift()
