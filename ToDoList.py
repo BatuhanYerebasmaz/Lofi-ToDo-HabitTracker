@@ -2131,8 +2131,19 @@ class HabitTrackerApp(ctk.CTk):
         HabitTrackerApp.CURRENT_INSTANCE = self
 
         self.title("Görev & Alışkanlık Takip Programı")
-        self.geometry("1380x870")
-        self.minsize(1100, 750)
+
+        try:
+            screen_w = self.winfo_screenwidth()
+            screen_h = self.winfo_screenheight()
+            default_w = min(1480, max(1200, int(screen_w * 0.94)))
+            default_h = min(920, max(750, int(screen_h * 0.88)))
+            px = max(0, (screen_w - default_w) // 2)
+            py = max(0, (screen_h - default_h) // 2)
+            self.geometry(f"{default_w}x{default_h}+{px}+{py}")
+        except Exception:
+            self.geometry("1440x880")
+
+        self.minsize(1050, 700)
 
         # Uygulama Simgesi (ToDo.ico)
         self.apply_app_icon()
@@ -2554,95 +2565,95 @@ class HabitTrackerApp(ctk.CTk):
 
         # ─── BAŞLIK ───
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.header_frame.pack(side="top", fill="x", padx=20, pady=(12, 4))
+        self.header_frame.pack(side="top", fill="x", padx=16, pady=(10, 4))
 
         self.title_label = ctk.CTkLabel(
             self.header_frame, text="📋 Görev & Alışkanlık Takibi",
-            font=ctk.CTkFont(size=21, weight="bold"), text_color=theme["text"])
+            font=ctk.CTkFont(size=19, weight="bold"), text_color=theme["text"])
         self.title_label.pack(side="left")
 
-        # XP & Level Gamification Frame (Genişletilmiş Seviye Barı)
+        # XP & Level Gamification Frame (Dengeli Seviye Barı)
         self.level_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.level_frame.pack(side="left", padx=(24, 0))
+        self.level_frame.pack(side="left", padx=(16, 0))
 
         self.level_badge_lbl = ctk.CTkLabel(
             self.level_frame, text="⭐ Lvl 1: Çaylak",
-            font=ctk.CTkFont(size=12, weight="bold"),
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.get("accent", "#FB7185")
         )
-        self.level_badge_lbl.pack(side="left", padx=(0, 10))
+        self.level_badge_lbl.pack(side="left", padx=(0, 8))
 
         self.xp_bar = ctk.CTkProgressBar(
-            self.level_frame, width=320, height=13,
-            corner_radius=7,
+            self.level_frame, width=190, height=12,
+            corner_radius=6,
             fg_color=theme["progress_bg"],
             progress_color=theme.get("moral_color", "#D98A48")
         )
-        self.xp_bar.pack(side="left", padx=(0, 10))
+        self.xp_bar.pack(side="left", padx=(0, 8))
         self.xp_bar.set(0)
 
         self.xp_label = ctk.CTkLabel(
             self.level_frame, text="0/120 XP",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=10, weight="bold"),
             text_color=theme["text_secondary"]
         )
-        self.xp_label.pack(side="left", padx=(0, 12))
+        self.xp_label.pack(side="left", padx=(0, 8))
 
         # Rozetler ve İstatistikler Grubu
         self.stats_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.stats_frame.pack(side="left", padx=(8, 0))
+        self.stats_frame.pack(side="left", padx=(4, 0))
 
         # 1. Seri (Streak)
         self.streak_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
-        self.streak_badge.pack(side="left", padx=(0, 6))
+        self.streak_badge.pack(side="left", padx=(0, 5))
         self.streak_lbl = ctk.CTkLabel(
-            self.streak_badge, text="🔥 0 Gün Seri",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            self.streak_badge, text="🔥 0 Gün",
+            font=ctk.CTkFont(size=10, weight="bold"),
             text_color=theme.get("accent", "#FB7185")
         )
-        self.streak_lbl.pack(padx=8, pady=3)
+        self.streak_lbl.pack(padx=7, pady=2)
 
         # 2. Kalkan (Shield)
         self.shield_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
         self.shield_badge.pack(side="left")
         self.shield_lbl = ctk.CTkLabel(
             self.shield_badge, text="🛡️ 1 Kalkan",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=10, weight="bold"),
             text_color=theme.get("efektiflik_color", "#957DC7")
         )
-        self.shield_lbl.pack(padx=8, pady=3)
+        self.shield_lbl.pack(padx=7, pady=2)
 
         # Sağ üst
         self.right_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
         self.right_header.pack(side="right")
 
         self.clock_label = ctk.CTkLabel(self.right_header, text="",
-                                        font=ctk.CTkFont(size=12, weight="bold"),
+                                        font=ctk.CTkFont(size=11, weight="bold"),
                                         text_color=theme["accent"])
-        self.clock_label.pack(side="left", padx=(0, 15))
+        self.clock_label.pack(side="left", padx=(0, 10))
 
         # Dark / Light switch
         mode = self.settings.get("mode", "light")
         self.mode_icon_label = ctk.CTkLabel(self.right_header,
                                             text="🌙" if mode == "dark" else "☀️",
-                                            font=ctk.CTkFont(size=16),
+                                            font=ctk.CTkFont(size=15),
                                             text_color=theme["text_secondary"])
         self.mode_icon_label.pack(side="left", padx=(0, 4))
 
         self.mode_switch = ctk.CTkSwitch(
-            self.right_header, text="", width=42,
+            self.right_header, text="", width=40,
             fg_color=theme["switch_off"], progress_color=theme["switch_on"],
             button_color=theme["switch_btn"], button_hover_color=theme["switch_btn_hover"],
             command=self.toggle_mode)
         if mode == "dark":
             self.mode_switch.select()
-        self.mode_switch.pack(side="left", padx=(0, 15))
+        self.mode_switch.pack(side="left", padx=(0, 10))
 
         # Ayarlar butonu (Yumuşak hap şeklinde)
         self.settings_btn = ctk.CTkButton(
-            self.right_header, text="⚙ Ayarlar", width=105, height=32,
+            self.right_header, text="⚙ Ayarlar", width=95, height=30,
             fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
-            text_color=theme["text"], corner_radius=14, font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=theme["text"], corner_radius=12, font=ctk.CTkFont(size=11, weight="bold"),
             command=self.open_settings)
         self.settings_btn.pack(side="left")
 
