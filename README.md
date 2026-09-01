@@ -45,6 +45,10 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ### 📅 4. Aylık Takip Tablosu & Minimalist Gezinme
 * **🎨 Pastel Aylık Matris Tablosu:** Ayın tüm günlerini (1-31) tek ekranda ultra-hızlı ve yumuşak pastel renklerle gösterir.
 * **⚡ Günlük Moral & Efektiflik Takibi:** Her gün için 1-5 arası moral ve verimlilik puanlaması.
+* **📝 Günlük & Not Sistemi (Fotoğraf Desteğiyle):**
+  * **Bugünün Notu:** Bugünün sütununun altına tıklayarak günün düşüncelerini, anılarını yazabilme ve bilgisayardan fotoğraf ekleyebilme.
+  * **📖 Okuma Modu (Salt Okunur):** Geçmiş günlerde tutulan notları ve eklenen fotoğrafları güvenle inceleyebilme.
+  * **🎈 Canlı Önizleme (Hover Tooltip):** Tabloda not bulunan günlerin üzerine fareyle gelindiğinde not özetini ve fotoğraf sayısını anında gösteren şık önizleme balonu.
 * **💊 Minimalist Ay Gezinme Kapsülü:** Tablonun hemen altındaki zarif kapsülle geçmiş ve gelecek ayların kayıtları arasında hızlıca gezinme; ay adına tıklandığında anında geçerli aya geri dönme.
 
 ---
@@ -102,6 +106,7 @@ ToDo/
 ├── images/                  # Uygulama ve sistem tepsisi simgeleri (.ico)
 ├── sounds/                  # 20 adet lofi ve mekanik ses efektleri (.wav)
 ├── data/                    # Görev, sayaç ve ayar veritabanı (data.json)
+│   └── notes_media/         # Günlük notlarına eklenen fotoğraflar ve resimler
 ├── ToDoList.py              # Ana uygulama kaynak kodu
 ├── baslat.bat               # Hızlı başlatma betiği
 ├── Kısayol Oluşturucu.vbs   # Evrensel Unicode masaüstü kısayol oluşturucu

@@ -64,10 +64,13 @@ import socket
 import winsound
 import webbrowser
 import time
+from tkinter import filedialog
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DATA_FILE = os.path.join(DATA_DIR, "data.json")
+NOTES_MEDIA_DIR = os.path.join(DATA_DIR, "notes_media")
+os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
 
 # Kök dizinde eski data.json varsa otomatik data/ içine taşı
 _old_root_data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
@@ -85,6 +88,7 @@ TURKISH_MONTHS = {
 }
 
 SHORT_DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Pzr"]
+TURKISH_DAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
 
 import ctypes
 import threading
@@ -1814,6 +1818,333 @@ class StickyWidget(ctk.CTkToplevel):
 
 
 # ============================================================
+#  GÜNLÜK & NOT SİSTEMİ (DAILY NOTES & TOOLTIP MODAL)
+# ============================================================
+class DailyNoteTooltip:
+    """Tabloda not simgelerinin üzerine gelindiğinde beliren yumuşak önizleme balonu."""
+    def __init__(self, canvas):
+        self.canvas = canvas
+        self.tip_window = None
+        self.current_ds = None
+
+    def show(self, x_root, y_root, d_obj, note_data, theme):
+        ds = d_obj.strftime("%Y-%m-%d")
+        if self.tip_window and self.current_ds == ds:
+            return
+        self.hide()
+        self.current_ds = ds
+
+        text = ""
+        images = []
+        if isinstance(note_data, dict):
+            text = note_data.get("text", "").strip()
+            images = note_data.get("images", [])
+        elif isinstance(note_data, str):
+            text = note_data.strip()
+
+        if not text and not images:
+            return
+
+        wd = d_obj.weekday()
+        day_str = f"📅 {d_obj.day} {TURKISH_MONTHS.get(d_obj.month, '')} {d_obj.year}, {TURKISH_DAYS[wd]}"
+
+        self.tip_window = tw = tk.Toplevel(self.canvas)
+        tw.wm_overrideredirect(True)
+        tw.attributes("-topmost", True)
+
+        bg_color = theme.get("card", "#FFFFFF")
+        fg_text = theme.get("text", "#000000")
+        fg_secondary = theme.get("text_secondary", "#666666")
+        border_c = theme.get("today_header", theme.get("btn_primary", "#4D7A56"))
+
+        outer = tk.Frame(tw, bg=border_c, padx=1, pady=1)
+        outer.pack(fill="both", expand=True)
+
+        body = tk.Frame(outer, bg=bg_color, padx=10, pady=8)
+        body.pack(fill="both", expand=True)
+
+        lbl_head = tk.Label(body, text=day_str, font=("Segoe UI", 8, "bold"), bg=bg_color, fg=border_c)
+        lbl_head.pack(anchor="w", pady=(0, 3))
+
+        preview_text = text
+        if len(preview_text) > 160:
+            preview_text = preview_text[:157] + "..."
+        if preview_text:
+            lbl_text = tk.Label(body, text=preview_text, font=("Segoe UI", 8), bg=bg_color, fg=fg_text,
+                                justify="left", wraplength=220)
+            lbl_text.pack(anchor="w")
+
+        if images:
+            img_info = f"📷 {len(images)} fotoğraf eklendi"
+            lbl_img = tk.Label(body, text=img_info, font=("Segoe UI", 7, "italic"), bg=bg_color, fg=fg_secondary)
+            lbl_img.pack(anchor="w", pady=(3, 0))
+
+        tw.update_idletasks()
+        tw_w = tw.winfo_reqwidth()
+        tw_h = tw.winfo_reqheight()
+
+        pos_x = x_root + 15
+        pos_y = y_root - tw_h - 10
+        if pos_y < 10:
+            pos_y = y_root + 25
+
+        tw.wm_geometry(f"+{int(pos_x)}+{int(pos_y)}")
+
+    def hide(self):
+        if self.tip_window:
+            try:
+                self.tip_window.destroy()
+            except Exception:
+                pass
+            self.tip_window = None
+            self.current_ds = None
+
+
+class DailyNoteModal(ctk.CTkToplevel):
+    """Günün Notu & Fotoğraf Penceresi (Bugün: Düzenleme / Diğer Günler: Salt Okunur)."""
+    def __init__(self, parent, date_obj):
+        super().__init__(parent)
+        self.parent = parent
+        self.date_obj = date_obj
+        self.ds = date_obj.strftime("%Y-%m-%d")
+        self.is_today = (date_obj == parent.today)
+        self.theme = parent.get_theme()
+
+        # Var olan not verisini yükle
+        raw_data = parent.daily_notes.get(self.ds, {})
+        if isinstance(raw_data, dict):
+            self.note_text = raw_data.get("text", "")
+            self.note_images = list(raw_data.get("images", []))
+        else:
+            self.note_text = str(raw_data)
+            self.note_images = []
+
+        self.title("📝 Günün Notu" if self.is_today else "📖 Notu Oku")
+        self.geometry("520x490")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.attributes("-topmost", True)
+        self.configure(fg_color=self.theme["bg"])
+
+        try:
+            px = parent.winfo_x() + (parent.winfo_width() - 520) // 2
+            py = parent.winfo_y() + (parent.winfo_height() - 490) // 2
+            self.geometry(f"+{max(20, px)}+{max(20, py)}")
+        except Exception:
+            pass
+
+        self.setup_ui()
+        if self.is_today:
+            self.bind("<Control-s>", lambda e: self.save_note())
+
+    def setup_ui(self):
+        theme = self.theme
+        wd = self.date_obj.weekday()
+        formatted_date = f"{self.date_obj.day} {TURKISH_MONTHS.get(self.date_obj.month, '')} {self.date_obj.year}, {TURKISH_DAYS[wd]}"
+
+        card = ctk.CTkFrame(self, fg_color=theme["card"], corner_radius=16)
+        card.pack(fill="both", expand=True, padx=14, pady=14)
+
+        # 1. Başlık Alanı
+        head = ctk.CTkFrame(card, fg_color="transparent")
+        head.pack(fill="x", padx=16, pady=(14, 8))
+
+        ctk.CTkLabel(
+            head, text=f"📅  {formatted_date}",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=theme["header_text"]
+        ).pack(side="left")
+
+        badge_text = "✍️ Notu Düzenle" if self.is_today else "📖 Salt Okunur"
+        badge_bg = theme["btn_primary"] if self.is_today else theme["card_alt"]
+        badge_fg = theme["text"] if self.is_today else theme["text_secondary"]
+        badge = ctk.CTkFrame(head, fg_color=badge_bg, corner_radius=8)
+        badge.pack(side="right")
+        ctk.CTkLabel(badge, text=badge_text, font=ctk.CTkFont(size=10, weight="bold"), text_color=badge_fg).pack(padx=8, pady=2)
+
+        # 2. Metin Alanı
+        txt_label_text = "Günün Notu & Düşüncelerin:" if self.is_today else "Bu Günün Notu:"
+        ctk.CTkLabel(
+            card, text=txt_label_text,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme["text"]
+        ).pack(anchor="w", padx=16, pady=(4, 4))
+
+        self.textbox = ctk.CTkTextbox(
+            card, height=150, corner_radius=10,
+            fg_color=theme["entry_bg"], border_width=1, border_color=theme["entry_border"],
+            text_color=theme["text"], font=ctk.CTkFont(size=11)
+        )
+        self.textbox.pack(fill="x", padx=16, pady=(0, 10))
+        if self.note_text:
+            self.textbox.insert("1.0", self.note_text)
+
+        if not self.is_today:
+            self.textbox.configure(state="disabled")
+
+        # 3. Fotoğraf Galerisi Başlığı & Ekle Butonu
+        gal_head = ctk.CTkFrame(card, fg_color="transparent")
+        gal_head.pack(fill="x", padx=16, pady=(0, 4))
+
+        ctk.CTkLabel(
+            gal_head, text="📷  Ekli Fotoğraflar:",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme["text"]
+        ).pack(side="left")
+
+        if self.is_today:
+            ctk.CTkButton(
+                gal_head, text="+ Fotoğraf Ekle", width=105, height=26, corner_radius=8,
+                fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
+                command=self.add_image
+            ).pack(side="right")
+
+        self.img_scroll = ctk.CTkScrollableFrame(
+            card, height=90, orientation="horizontal",
+            fg_color=theme["card_alt"], corner_radius=10
+        )
+        self.img_scroll.pack(fill="x", padx=16, pady=(0, 12))
+
+        self.render_image_thumbnails()
+
+        # 4. Alt Butonlar (Kaydet / Sil / Kapat)
+        btn_bar = ctk.CTkFrame(card, fg_color="transparent")
+        btn_bar.pack(fill="x", padx=16, pady=(0, 12))
+
+        if self.is_today:
+            ctk.CTkButton(
+                btn_bar, text="💾 Kaydet", height=32, corner_radius=10,
+                fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
+                command=self.save_note
+            ).pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+            if self.note_text or self.note_images:
+                ctk.CTkButton(
+                    btn_bar, text="🗑️ Notu Sil", height=32, corner_radius=10,
+                    fg_color=theme.get("btn_danger", "#EF4444"), hover_color=theme.get("btn_danger_hover", "#DC2626"),
+                    text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
+                    command=self.delete_note
+                ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkButton(
+                btn_bar, text="İptal", height=32, width=80, corner_radius=10,
+                fg_color=theme["card_alt"], hover_color=theme["checkbox_border"],
+                text_color=theme["text"], font=ctk.CTkFont(size=11),
+                command=self.destroy
+            ).pack(side="right")
+        else:
+            ctk.CTkButton(
+                btn_bar, text="Kapat", height=32, corner_radius=10,
+                fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
+                command=self.destroy
+            ).pack(fill="x")
+
+    def render_image_thumbnails(self):
+        for widget in self.img_scroll.winfo_children():
+            widget.destroy()
+
+        valid_images = [p for p in self.note_images if os.path.exists(p)]
+        self.note_images = valid_images
+
+        if not self.note_images:
+            empty_msg = "Henüz fotoğraf eklenmemiş." if not self.is_today else "Henüz fotoğraf eklenmedi. '+ Fotoğraf Ekle' ile ekleyebilirsiniz."
+            ctk.CTkLabel(
+                self.img_scroll, text=empty_msg,
+                font=ctk.CTkFont(size=10, slant="italic"),
+                text_color=self.theme["text_secondary"]
+            ).pack(padx=10, pady=25)
+            return
+
+        self._thumb_refs = []
+        for idx, img_path in enumerate(self.note_images):
+            try:
+                pil_img = Image.open(img_path)
+                pil_img.thumbnail((70, 70), Image.Resampling.LANCZOS)
+                ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=pil_img.size)
+                self._thumb_refs.append(ctk_img)
+
+                thumb_card = ctk.CTkFrame(self.img_scroll, fg_color=self.theme["card"], corner_radius=8,
+                                          border_width=1, border_color=self.theme["entry_border"])
+                thumb_card.pack(side="left", padx=5, pady=4)
+
+                btn_img = ctk.CTkButton(
+                    thumb_card, text="", image=ctk_img, width=72, height=72,
+                    fg_color="transparent", hover_color=self.theme["btn_primary_hover"],
+                    corner_radius=6,
+                    command=lambda p=img_path: self.open_full_image(p)
+                )
+                btn_img.pack(padx=2, pady=2)
+
+                if self.is_today:
+                    btn_del = ctk.CTkButton(
+                        thumb_card, text="✕", width=18, height=18, corner_radius=9,
+                        fg_color=self.theme.get("btn_danger", "#EF4444"), hover_color=self.theme.get("btn_danger_hover", "#DC2626"),
+                        text_color="#FFFFFF", font=ctk.CTkFont(size=9, weight="bold"),
+                        command=lambda i=idx: self.remove_image(i)
+                    )
+                    btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
+            except Exception as e:
+                print(f"Resim thumbnail yüklenemedi: {e}")
+
+    def add_image(self):
+        files = filedialog.askopenfilenames(
+            title="Fotoğraf Seç",
+            filetypes=[("Resim Dosyaları", "*.png *.jpg *.jpeg *.webp *.bmp *.gif")]
+        )
+        if not files:
+            return
+        os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
+        import shutil
+        for f in files:
+            try:
+                ext = os.path.splitext(f)[1]
+                unique_name = f"{self.ds}_{int(time.time()*1000)}_{random.randint(100,999)}{ext}"
+                dest_path = os.path.join(NOTES_MEDIA_DIR, unique_name)
+                shutil.copy2(f, dest_path)
+                self.note_images.append(dest_path)
+            except Exception as e:
+                print(f"Fotoğraf kopyalanamadı: {e}")
+        self.render_image_thumbnails()
+
+    def remove_image(self, index):
+        if 0 <= index < len(self.note_images):
+            self.note_images.pop(index)
+            self.render_image_thumbnails()
+
+    def open_full_image(self, img_path):
+        if os.path.exists(img_path):
+            try:
+                os.startfile(img_path)
+            except Exception:
+                webbrowser.open(img_path)
+
+    def save_note(self):
+        text = self.textbox.get("1.0", "end-1c").strip()
+        if text or self.note_images:
+            self.parent.daily_notes[self.ds] = {
+                "text": text,
+                "images": self.note_images
+            }
+        else:
+            self.parent.daily_notes.pop(self.ds, None)
+
+        self.parent.save_data()
+        self.parent.render_table()
+        play_notification_sound()
+        self.destroy()
+
+    def delete_note(self):
+        self.parent.daily_notes.pop(self.ds, None)
+        self.parent.save_data()
+        self.parent.render_table()
+        play_button_sound()
+        self.destroy()
+
+
+# ============================================================
 #  AYARLAR PENCERESİ
 # ============================================================
 class SettingsWindow(ctk.CTkToplevel):
@@ -2719,6 +3050,8 @@ class HabitTrackerApp(ctk.CTk):
 
         self._max_streak_cache = None
         self._max_streak_dirty = True
+        self.daily_notes = {}
+        self._note_tooltip_manager = None
 
         self.load_data()
         self.check_streak_freeze()
@@ -2793,6 +3126,7 @@ class HabitTrackerApp(ctk.CTk):
                     self.records = data.get("records", {})
                     self.moral_records = data.get("moral_records", {})
                     self.efektiflik_records = data.get("efektiflik_records", {})
+                    self.daily_notes = data.get("daily_notes", {})
                     self.settings = data.get("settings", self.settings)
                     return
             except Exception as e:
@@ -2809,6 +3143,7 @@ class HabitTrackerApp(ctk.CTk):
                     self.records = data.get("records", {})
                     self.moral_records = data.get("moral_records", {})
                     self.efektiflik_records = data.get("efektiflik_records", {})
+                    self.daily_notes = data.get("daily_notes", {})
                     self.settings = data.get("settings", self.settings)
             except Exception:
                 pass
@@ -2821,6 +3156,7 @@ class HabitTrackerApp(ctk.CTk):
             "records": self.records,
             "moral_records": self.moral_records,
             "efektiflik_records": self.efektiflik_records,
+            "daily_notes": getattr(self, "daily_notes", {}),
             "settings": self.settings,
         }
         try:
@@ -3496,6 +3832,7 @@ class HabitTrackerApp(ctk.CTk):
             "month": month,
             "moral_y": header_h + total_task_rows * row_h + sep_h,
             "efektiflik_y": header_h + total_task_rows * row_h + sep_h + row_h,
+            "note_y": header_h + total_task_rows * row_h + sep_h + 2 * row_h,
         }
 
         # 1. Başlık: Ay İsmi
@@ -3511,7 +3848,7 @@ class HabitTrackerApp(ctk.CTk):
         )
 
         # 3. Gün Sütunları ve Vurguları
-        total_table_h = header_h + (total_task_rows + 2) * row_h + sep_h + 8
+        total_table_h = header_h + (total_task_rows + 3) * row_h + sep_h + 8
 
         for day in range(1, num_days + 1):
             d_obj = datetime.date(year, month, day)
@@ -3724,7 +4061,56 @@ class HabitTrackerApp(ctk.CTk):
                     fill=theme["efektiflik_color"] if is_today else theme["text_secondary"]
                 )
 
-    # ---------- TABLO TIKLAMA İŞLEMLERİ (SADECE BUGÜN TIKLANABİLİR) ----------
+        # 8. Not Satırı
+        note_y = self._table_geo["note_y"]
+        canvas.create_text(
+            12, note_y + row_h / 2, text="📝 Not",
+            anchor="w", font=("Segoe UI", 9, "bold"), fill=theme.get("today_header", theme["text"])
+        )
+
+        for day in range(1, num_days + 1):
+            d_obj = datetime.date(year, month, day)
+            ds = d_obj.strftime("%Y-%m-%d")
+            note_info = getattr(self, "daily_notes", {}).get(ds)
+            is_today = (d_obj == self.today)
+
+            has_note = False
+            if isinstance(note_info, dict):
+                has_note = bool(note_info.get("text") or note_info.get("images"))
+            elif isinstance(note_info, str):
+                has_note = bool(note_info.strip())
+
+            x1 = task_col_w + (day - 1) * col_w
+            x2 = x1 + col_w
+            cx = (x1 + x2) / 2
+            cy = note_y + row_h / 2
+
+            if has_note:
+                draw_round_rect(
+                    canvas, cx - 10, cy - 9, cx + 10, cy + 9, r=5,
+                    fill=theme["btn_primary"], outline=theme.get("today_header", theme["btn_primary_hover"])
+                )
+                canvas.create_text(
+                    cx, cy, text="📝",
+                    font=("Segoe UI", 8), fill=theme["text"]
+                )
+            elif is_today:
+                draw_round_rect(
+                    canvas, cx - 9, cy - 8, cx + 9, cy + 8, r=4,
+                    fill=theme["checkbox_bg"], outline=theme["today_header"], width=1.2
+                )
+                canvas.create_text(
+                    cx, cy, text="✏️",
+                    font=("Segoe UI", 7), fill=theme["today_header"]
+                )
+            else:
+                canvas.create_text(
+                    cx, cy, text="-",
+                    font=("Segoe UI", 8, "normal"),
+                    fill=theme["text_secondary"]
+                )
+
+    # ---------- TABLO TIKLAMA İŞLEMLERİ ----------
     def on_table_click(self, event):
         if not hasattr(self, "_table_geo"):
             return
@@ -3743,12 +4129,10 @@ class HabitTrackerApp(ctk.CTk):
 
         d_obj = datetime.date(geo["year"], geo["month"], day)
 
-        # KURAL: Sadece BUGÜNÜN günü tıklanabilir ve işaretlenebilir
-        if d_obj != self.today:
-            return
-
-        # 1. Görev Satırlarına Tıklama (Bugün)
+        # 1. Görev Satırlarına Tıklama (SADECE BUGÜN)
         if geo["header_h"] <= y < geo["header_h"] + len(self.tasks) * geo["row_h"]:
+            if d_obj != self.today:
+                return
             task_idx = int((y - geo["header_h"]) / geo["row_h"])
             if 0 <= task_idx < len(self.tasks):
                 task_name = self.tasks[task_idx]
@@ -3770,8 +4154,10 @@ class HabitTrackerApp(ctk.CTk):
                 self.check_daily_completion()
                 return
 
-        # 2. Moral Satırına Tıklama (Bugün)
+        # 2. Moral Satırına Tıklama (SADECE BUGÜN)
         if geo["moral_y"] <= y < geo["moral_y"] + geo["row_h"]:
+            if d_obj != self.today:
+                return
             play_rating_sound()
             values = ["-", "1", "2", "3", "4", "5"]
             ds = d_obj.strftime("%Y-%m-%d")
@@ -3782,8 +4168,10 @@ class HabitTrackerApp(ctk.CTk):
             self.update_charts()
             return
 
-        # 3. Efektiflik Satırına Tıklama (Bugün)
+        # 3. Efektiflik Satırına Tıklama (SADECE BUGÜN)
         if geo["efektiflik_y"] <= y < geo["efektiflik_y"] + geo["row_h"]:
+            if d_obj != self.today:
+                return
             play_rating_sound()
             values = ["-", "1", "2", "3", "4", "5"]
             ds = d_obj.strftime("%Y-%m-%d")
@@ -3792,6 +4180,21 @@ class HabitTrackerApp(ctk.CTk):
             self.set_score(d_obj, "efektiflik", values[next_idx])
             self.render_table()
             self.update_charts()
+            return
+
+        # 4. Not Satırına Tıklama (Bugün Düzenlenir, Not Varsa Okunur)
+        if geo["note_y"] <= y < geo["note_y"] + geo["row_h"]:
+            ds = d_obj.strftime("%Y-%m-%d")
+            note_data = getattr(self, "daily_notes", {}).get(ds)
+            has_note = False
+            if isinstance(note_data, dict):
+                has_note = bool(note_data.get("text") or note_data.get("images"))
+            elif isinstance(note_data, str):
+                has_note = bool(note_data.strip())
+
+            if d_obj == self.today or has_note:
+                play_button_sound()
+                self.open_daily_note_modal(d_obj)
             return
 
     # ---------- TABLO SAĞ TIKLAMA (SAYACI AZALT / İŞARETİ KALDIR) ----------
@@ -3860,18 +4263,56 @@ class HabitTrackerApp(ctk.CTk):
         x, y = event.x, event.y
 
         desired_cursor = ""
+        is_over_note = False
+
         if x >= geo["task_col_w"]:
             day_idx = int((x - geo["task_col_w"]) / geo["col_w"])
             day = day_idx + 1
-            if (1 <= day <= geo["num_days"] and
-                    day == self.today.day and
-                    geo["month"] == self.today.month and
-                    geo["header_h"] <= y <= geo["efektiflik_y"] + geo["row_h"]):
-                desired_cursor = "hand2"
+            if 1 <= day <= geo["num_days"]:
+                d_obj = datetime.date(geo["year"], geo["month"], day)
+                ds = d_obj.strftime("%Y-%m-%d")
+                is_today = (d_obj == self.today)
+
+                # 1. Görev & Puan Satırları (Sadece Bugün)
+                if is_today and geo["header_h"] <= y <= geo["efektiflik_y"] + geo["row_h"]:
+                    desired_cursor = "hand2"
+
+                # 2. Not Satırı (Bugün veya Not Varsa)
+                elif geo["note_y"] <= y < geo["note_y"] + geo["row_h"]:
+                    note_data = getattr(self, "daily_notes", {}).get(ds)
+                    has_note = False
+                    if isinstance(note_data, dict):
+                        has_note = bool(note_data.get("text") or note_data.get("images"))
+                    elif isinstance(note_data, str):
+                        has_note = bool(note_data.strip())
+
+                    if is_today or has_note:
+                        desired_cursor = "hand2"
+
+                    if has_note:
+                        is_over_note = True
+                        self.show_note_tooltip(event, d_obj, note_data)
+
+        if not is_over_note:
+            self.hide_note_tooltip()
 
         if getattr(self, "_current_table_cursor", None) != desired_cursor:
             self._current_table_cursor = desired_cursor
             self.table_canvas.configure(cursor=desired_cursor)
+
+    def open_daily_note_modal(self, d_obj):
+        self.hide_note_tooltip()
+        DailyNoteModal(self, d_obj)
+
+    def show_note_tooltip(self, event, d_obj, note_data):
+        if not hasattr(self, "_note_tooltip_manager") or not self._note_tooltip_manager:
+            self._note_tooltip_manager = DailyNoteTooltip(self.table_canvas)
+        theme = self.get_theme()
+        self._note_tooltip_manager.show(event.x_root, event.y_root, d_obj, note_data, theme)
+
+    def hide_note_tooltip(self):
+        if hasattr(self, "_note_tooltip_manager") and self._note_tooltip_manager:
+            self._note_tooltip_manager.hide()
 
     # ---------- GRAFİKLER & DASHBOARD (MODERN VE DOLGUN) ----------
     def setup_charts(self):
