@@ -369,8 +369,8 @@ def scan_local_ai_models():
     """Google Gemini, Ollama ve LM Studio modellerini tarar ve listeler."""
     models = [
         DEFAULT_AI_MODEL,
-        "Google Gemini (1.5 Flash - Hızlı & Ücretsiz)",
-        "Google Gemini (2.0 Flash - Yeni)",
+        "Google Gemini 1.5 Flash (API Key Gerekli - Ücretsiz)",
+        "Google Gemini 2.0 Flash (API Key Gerekli - Yeni)",
     ]
     found_set = set(models)
 
@@ -748,7 +748,7 @@ def generate_ai_roast(task_name, days_missed=0, personality="Sert & Direkt", mod
     timing_desc = f"{days_missed} gündür aksatılıyor" if days_missed > 1 else "bugün henüz yapılmadı"
 
     # 0. Google Gemini Bulut Modeli
-    if model_choice.startswith("Google Gemini"):
+    if "gemini" in model_choice.lower():
         api_key = ""
         if hasattr(HabitTrackerApp, "CURRENT_INSTANCE") and HabitTrackerApp.CURRENT_INSTANCE:
             api_key = HabitTrackerApp.CURRENT_INSTANCE.settings.get("gemini_api_key", "")
@@ -2268,10 +2268,13 @@ class SettingsWindow(ctk.CTkToplevel):
         m_row = ctk.CTkFrame(m_box, fg_color="transparent")
         m_row.pack(fill="x", padx=12, pady=(0, 10))
 
-        # Tüm yerel modelleri (Ollama, LM Studio) ve Google Gemini'yi anında tara ve birleştir
-        scanned = scan_local_ai_models()
+        guaranteed_models = [
+            DEFAULT_AI_MODEL,
+            "Google Gemini 1.5 Flash (API Key Gerekli - Ücretsiz)",
+            "Google Gemini 2.0 Flash (API Key Gerekli - Yeni)"
+        ]
         saved_models = self.parent.settings.get("detected_ai_models", [])
-        combined_models = list(scanned)
+        combined_models = list(guaranteed_models)
         for sm in saved_models:
             if sm not in combined_models:
                 combined_models.append(sm)
