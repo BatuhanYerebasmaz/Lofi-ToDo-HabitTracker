@@ -2143,6 +2143,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 font=ctk.CTkFont(size=10, slant="italic"),
                 text_color=self.theme["text_secondary"]
             ).pack(padx=14, pady=35)
+            self.update_idletasks()
             return
 
         self._polaroid_refs = []
@@ -2161,25 +2162,31 @@ class DailyNoteModal(ctk.CTkToplevel):
 
                 btn_img = ctk.CTkButton(
                     card, text="", image=ctk_img,
+                    width=polaroid_img.width, height=polaroid_img.height,
                     fg_color="transparent", hover_color=self.theme["btn_primary_hover"],
-                    corner_radius=8,
+                    corner_radius=8, cursor="hand2",
                     command=lambda p=img_path: self.open_full_image(p)
                 )
                 btn_img.pack()
 
                 if self.is_today:
                     btn_del = ctk.CTkButton(
-                        card, text="✕", width=18, height=18, corner_radius=9,
+                        card, text="✕", width=22, height=22, corner_radius=11,
                         fg_color=self.theme.get("btn_danger", "#EF4444"), hover_color=self.theme.get("btn_danger_hover", "#DC2626"),
-                        text_color="#FFFFFF", font=ctk.CTkFont(size=9, weight="bold"),
+                        text_color="#FFFFFF", font=ctk.CTkFont(size=10, weight="bold"),
+                        cursor="hand2",
                         command=lambda i=idx: self.remove_image(i)
                     )
-                    btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=0, y=0)
+                    btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
+                    btn_del.lift()
             except Exception as e:
                 print(f"Polaroid fotoğraf yüklenemedi: {e}")
 
+        self.update_idletasks()
+
     def add_image(self):
         files = filedialog.askopenfilenames(
+            parent=self,
             title="Fotoğraf Seç (Deftere İğnele)",
             filetypes=[("Resim Dosyaları", "*.png *.jpg *.jpeg *.webp *.bmp *.gif")]
         )
@@ -2196,12 +2203,19 @@ class DailyNoteModal(ctk.CTkToplevel):
                 self.note_images.append(dest_path)
             except Exception as e:
                 print(f"Fotoğraf kopyalanamadı: {e}")
+
+        play_button_sound()
         self.render_polaroid_gallery()
+        self.lift()
+        self.focus_force()
 
     def remove_image(self, index):
         if 0 <= index < len(self.note_images):
             self.note_images.pop(index)
+            play_button_sound()
             self.render_polaroid_gallery()
+            self.lift()
+            self.focus_force()
 
     def open_full_image(self, img_path):
         if os.path.exists(img_path):
