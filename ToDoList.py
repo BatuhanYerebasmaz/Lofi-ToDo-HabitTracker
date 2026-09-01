@@ -58,14 +58,9 @@ import datetime
 import calendar
 import json
 import random
-import os
-import io
-import math
-import struct
-import wave
-import winsound
+import threading
+import ctypes
 import socket
-import sys
 import time
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -276,9 +271,9 @@ def play_notification_sound():
 def play_rating_sound():
     """Moral ve Efektiflik puanlama kutucuklarına basıldığında seçili sesi çalar."""
     try:
-        cur_sound = "Minimal Tık & Bip (Modern)"
+        cur_sound = "Minimalist UI Tık"
         if hasattr(HabitTrackerApp, "CURRENT_INSTANCE") and HabitTrackerApp.CURRENT_INSTANCE:
-            cur_sound = HabitTrackerApp.CURRENT_INSTANCE.settings.get("rating_sound", "Minimal Tık & Bip (Modern)")
+            cur_sound = HabitTrackerApp.CURRENT_INSTANCE.settings.get("rating_sound", "Minimalist UI Tık")
         if cur_sound == "Sessiz":
             return
         info = SOUND_OPTIONS.get(cur_sound)
@@ -1557,6 +1552,8 @@ class SettingsWindow(ctk.CTkToplevel):
                 self.parent.task_targets.pop(task_name, None)
             if "ai_target_tasks" in self.parent.settings and task_name in self.parent.settings["ai_target_tasks"]:
                 self.parent.settings["ai_target_tasks"].remove(task_name)
+            if hasattr(self.parent, "task_scheduled_times"):
+                self.parent.task_scheduled_times.pop(task_name, None)
             if hasattr(self.parent, "task_snooze_counts"):
                 self.parent.task_snooze_counts.pop(task_name, None)
             if hasattr(self.parent, "active_popups") and task_name in self.parent.active_popups:
@@ -1766,9 +1763,9 @@ class SettingsWindow(ctk.CTkToplevel):
         self.notif_desc_lbl.pack(anchor="w", padx=14, pady=(0, 12))
 
         # 4. KART: Moral & Efektiflik Puanlama Sesi
-        curr_rating = self.parent.settings.get("rating_sound", "Minimal Tık & Bip (Modern)")
+        curr_rating = self.parent.settings.get("rating_sound", "Minimalist UI Tık")
         if curr_rating not in SOUND_OPTIONS:
-            curr_rating = "Minimal Tık & Bip (Modern)"
+            curr_rating = "Minimalist UI Tık"
         self.rating_sound_var = ctk.StringVar(value=curr_rating)
 
         c4 = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=14)
@@ -2094,9 +2091,13 @@ class SettingsWindow(ctk.CTkToplevel):
 
     def _save_custom_prompt(self):
         self._prompt_save_job = None
-        val = self.custom_prompt_entry.get()
-        self.parent.settings["ai_custom_prompt"] = val
-        self.parent.save_data()
+        try:
+            if hasattr(self, "custom_prompt_entry") and self.custom_prompt_entry.winfo_exists():
+                val = self.custom_prompt_entry.get()
+                self.parent.settings["ai_custom_prompt"] = val
+                self.parent.save_data()
+        except Exception:
+            pass
 
     def on_interval_change(self, val):
         play_button_sound()
@@ -2180,7 +2181,7 @@ class HabitTrackerApp(ctk.CTk):
             "task_sound": "Mekanik & Pop İkilisi",
             "button_sound": "Krem Switch (Lofi)",
             "notification_sound": "Tatlı Kabarcık (Bubble Pop)",
-            "rating_sound": "Minimal Tık & Bip (Modern)",
+            "rating_sound": "Minimalist UI Tık",
             "bonus_xp": 0,
             "streak_freezes": 1,
             "last_freeze_week": self.today.isocalendar()[1],
@@ -2209,7 +2210,7 @@ class HabitTrackerApp(ctk.CTk):
         if self.settings.get("notification_sound") not in SOUND_OPTIONS:
             self.settings["notification_sound"] = "Tatlı Kabarcık (Bubble Pop)"
         if self.settings.get("rating_sound") not in SOUND_OPTIONS:
-            self.settings["rating_sound"] = "Minimal Tık & Bip (Modern)"
+            self.settings["rating_sound"] = "Minimalist UI Tık"
 
         self.settings.setdefault("bonus_xp", 0)
         self.settings.setdefault("streak_freezes", 1)
@@ -2413,18 +2414,23 @@ class HabitTrackerApp(ctk.CTk):
         return max(0, total_xp)
 
     def calculate_streak(self):
-        """Bugünden veya dünden geriye doğru kesintisiz görev yapılan ardışık gün serisini hesaplar."""
+        """Bugünden veya dünden geriye doğru kesintisiz görev yapılan ardışık gün serisini hesaplar (Kalkan korumalı)."""
         streak = 0
         cur_d = self.today
         today_done = sum(1 for t in self.tasks if self.get_task_state(cur_d, t)) if self.tasks else 0
         if today_done == 0:
             cur_d = self.today - datetime.timedelta(days=1)
 
+        freezes = self.settings.get("streak_freezes", 1)
+
         while True:
-            ds = cur_d.strftime("%Y-%m-%d")
             has_done = any(self.get_task_state(cur_d, t) for t in self.tasks) if self.tasks else False
             if has_done:
                 streak += 1
+                cur_d -= datetime.timedelta(days=1)
+            elif freezes > 0 and streak > 0:
+                # Kalkan bu 1 günlük kaçırmayı seriyi bozmadan korur
+                freezes -= 1
                 cur_d -= datetime.timedelta(days=1)
             else:
                 break
@@ -2878,8 +2884,7 @@ class HabitTrackerApp(ctk.CTk):
     def get_today_progress(self):
         if not self.tasks:
             return 0, 0
-        d_rec = self.records.get(self.today.strftime("%Y-%m-%d"), {})
-        done = sum(1 for t in self.tasks if d_rec.get(t, False))
+        done = sum(1 for t in self.tasks if self.get_task_state(self.today, t))
         return done, len(self.tasks)
 
     def update_progress(self):
@@ -3590,8 +3595,8 @@ class HabitTrackerApp(ctk.CTk):
             if task_name not in rec:
                 # Bu görev o tarihte henüz eklenmemişse geçmişi saymayı durdur
                 break
-            if rec.get(task_name, False):
-                # Görev o gün yapılmış, aksatma serisi sonlandı
+            if self.get_task_state(check_date, task_name):
+                # Görev o gün yapılmış/tamamlanmış, aksatma serisi sonlandı
                 break
             days += 1
             check_date -= datetime.timedelta(days=1)
@@ -3625,6 +3630,8 @@ class HabitTrackerApp(ctk.CTk):
 
     def trigger_single_ai_notification(self, task_name, is_test=False, force_snooze_count=None):
         """Tek bir görev için arka planda AI roast üretip popup açar."""
+        if not is_test and task_name not in self.tasks:
+            return
         dismissed = getattr(self, "today_dismissed_tasks", set())
         if not is_test and task_name in dismissed:
             return
