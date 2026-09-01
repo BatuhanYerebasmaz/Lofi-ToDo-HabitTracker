@@ -1521,7 +1521,7 @@ class GlobalHotkeyManager:
 #  KAYAN MİNİ WİDGET (STICKY MODE - ALWAYS ON TOP)
 # ============================================================
 class StickyWidget(ctk.CTkToplevel):
-    """Her zaman üstte duran, Windows DWM donanımsal yuvarlak köşeli, kompakt lofi mini görev widget'ı."""
+    """Her zaman üstte duran, Windows SetWindowRgn ile köşeleri sıfır taşmasız pürüzsüz kesilmiş mini görev widget'ı."""
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
@@ -1542,33 +1542,33 @@ class StickyWidget(ctk.CTkToplevel):
 
         self.setup_ui()
         self.bind_events()
-        self.after(50, self.apply_dwm_rounding)
+        self.after(30, self.apply_round_corners)
 
-    def apply_dwm_rounding(self):
-        """Windows 11 DWM donanımsal pürüzsüz yuvarlak köşe ve gölge uygular."""
+    def apply_round_corners(self):
+        """Windows SetWindowRgn ile pencereyi tam yuvarlak keser (sivri köşe ve beyazlıkları sıfırlar)."""
         try:
             self.update_idletasks()
-            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
-            if not hwnd:
-                hwnd = self.winfo_id()
-            DWMWA_WINDOW_CORNER_PREFERENCE = 33
-            DWMWCP_ROUND = 2
-            val = ctypes.c_int(DWMWCP_ROUND)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(val), ctypes.sizeof(val)
-            )
+            w = self.winfo_width()
+            h = self.winfo_height()
+            if w <= 1 or h <= 1:
+                w = 260
+                h = 340
+            hwnd = self.winfo_id()
+            # 26px ellipse çapı (13px radius)
+            rgn = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, 26, 26)
+            ctypes.windll.user32.SetWindowRgn(hwnd, rgn, True)
         except Exception:
             pass
 
     def setup_ui(self):
         theme = self.parent.get_theme()
 
-        # Dış Kart (Piksel bozulması olmadan tam doldurur)
+        # Dış Kart (Pencereye tam oturur, köşeler Windows GDI tarafından pürüzsüzce kesilir)
         self.card = ctk.CTkFrame(
-            self, fg_color=theme["card"], corner_radius=12,
+            self, fg_color=theme["card"], corner_radius=13,
             border_width=1.5, border_color=theme.get("accent", "#7C3AED")
         )
-        self.card.pack(fill="both", expand=True, padx=1, pady=1)
+        self.card.pack(fill="both", expand=True, padx=0, pady=0)
 
         # Başlık Çubuğu (Sürüklenebilir)
         self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=36, corner_radius=10)
@@ -1734,7 +1734,7 @@ class StickyWidget(ctk.CTkToplevel):
             scrollbar_button_hover_color=theme["btn_primary_hover"]
         )
         self.render_tasks()
-        self.apply_dwm_rounding()
+        self.apply_round_corners()
 
     def bind_events(self):
         for w in (self.header, self.title_lbl, self.progress_lbl, self.progress_frame):
@@ -1764,7 +1764,7 @@ class StickyWidget(ctk.CTkToplevel):
         self.deiconify()
         self.lift()
         self.render_tasks()
-        self.apply_dwm_rounding()
+        self.apply_round_corners()
 
     def restore_main_window(self):
         play_button_sound()
