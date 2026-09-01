@@ -273,6 +273,70 @@ def play_notification_sound():
         pass
 
 
+def play_rating_sound():
+    """Moral ve Efektiflik puanlama kutucuklarına basıldığında seçili sesi çalar."""
+    try:
+        cur_sound = "Minimal Tık & Bip (Modern)"
+        if hasattr(HabitTrackerApp, "CURRENT_INSTANCE") and HabitTrackerApp.CURRENT_INSTANCE:
+            cur_sound = HabitTrackerApp.CURRENT_INSTANCE.settings.get("rating_sound", "Minimal Tık & Bip (Modern)")
+        if cur_sound == "Sessiz":
+            return
+        info = SOUND_OPTIONS.get(cur_sound)
+        if info and info["on_file"]:
+            SoundEngine.play(info["on_file"])
+    except Exception:
+        pass
+
+
+# ============================================================
+#  OYUNLAŞTIRMA (XP & SEVİYE SİSTEMİ)
+# ============================================================
+LEVEL_RANKS = [
+    (1, "🐣", "Çaylak"),
+    (2, "🌱", "Hevesli"),
+    (3, "⚡", "Odak Çırağı"),
+    (5, "🎯", "Disiplin Yolcusu"),
+    (8, "🔥", "İrade Savaşçısı"),
+    (10, "⚔️", "Alışkanlık Ustası"),
+    (15, "🛡️", "İrade Muhafızı"),
+    (20, "🏆", "Odak Şampiyonu"),
+    (30, "👑", "Disiplin Şövalyesi"),
+    (50, "🧘", "Lofi Gurusu")
+]
+
+
+def get_level_info(xp):
+    """Verilen toplam XP'ye göre seviye, mevcut seviye XP'si, sonraki seviye hedefi, yüzde ve unvan döndürür."""
+    level = 1
+    xp_remaining = max(0, int(xp))
+    while True:
+        needed_for_next = 80 + (level * 40)
+        if xp_remaining < needed_for_next:
+            break
+        xp_remaining -= needed_for_next
+        level += 1
+
+    needed_for_next = 80 + (level * 40)
+    progress_ratio = min(1.0, max(0.0, xp_remaining / needed_for_next))
+
+    rank_icon, rank_title = "🐣", "Çaylak"
+    for req_lvl, icon, title in LEVEL_RANKS:
+        if level >= req_lvl:
+            rank_icon, rank_title = icon, title
+        else:
+            break
+
+    return {
+        "level": level,
+        "current_xp": xp_remaining,
+        "next_xp": needed_for_next,
+        "total_xp": max(0, int(xp)),
+        "ratio": progress_ratio,
+        "icon": rank_icon,
+        "title": rank_title
+    }
+
+
 # ============================================================
 #  SİSTEM TEPSİSİ & YEREL AI DARLAMA MOTORU
 # ============================================================
@@ -1398,19 +1462,28 @@ class SettingsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(add_frame, text="Yeni Görev Ekle",
                      font=ctk.CTkFont(weight="bold", size=14),
                      text_color=theme["text"]).pack(anchor="w", padx=12, pady=(10, 4))
+        ctk.CTkLabel(add_frame, text="Sayaçlı görevler için hedef sayı yazabilirsiniz (örn: 8 bardak su, 20 sayfa)",
+                     font=ctk.CTkFont(size=10),
+                     text_color=theme["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 6))
 
         inp = ctk.CTkFrame(add_frame, fg_color="transparent")
         inp.pack(fill="x", padx=12, pady=(0, 10))
 
-        self.task_entry = ctk.CTkEntry(inp, placeholder_text="Görev adı yazın...", width=260,
+        self.task_entry = ctk.CTkEntry(inp, placeholder_text="Görev adı yazın...", width=210,
                                        corner_radius=10,
                                        fg_color=theme["entry_bg"], border_color=theme["entry_border"],
                                        text_color=theme["text"])
-        self.task_entry.pack(side="left", padx=(0, 8))
+        self.task_entry.pack(side="left", padx=(0, 6))
 
-        ctk.CTkButton(inp, text="Ekle", width=80, corner_radius=12,
+        self.target_entry = ctk.CTkEntry(inp, placeholder_text="Hedef (1)", width=80,
+                                         corner_radius=10,
+                                         fg_color=theme["entry_bg"], border_color=theme["entry_border"],
+                                         text_color=theme["text"])
+        self.target_entry.pack(side="left", padx=(0, 6))
+
+        ctk.CTkButton(inp, text="Ekle", width=75, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                      text_color=theme["text"],
+                      text_color=theme["text"], font=ctk.CTkFont(weight="bold"),
                       command=self.add_task).pack(side="left")
 
         list_frame = ctk.CTkFrame(self.tab_tasks, corner_radius=12, fg_color=theme["card_alt"])
@@ -1439,10 +1512,17 @@ class SettingsWindow(ctk.CTkToplevel):
             row = ctk.CTkFrame(self.scroll_frame, fg_color=theme["card"], corner_radius=10)
             row.pack(fill="x", pady=3, padx=4)
 
+            target = self.parent.get_task_target(task)
             ctk.CTkLabel(row, text=task, anchor="w", font=ctk.CTkFont(size=12),
                          text_color=theme["text"]).pack(side="left", padx=12, fill="x", expand=True)
 
-            ctk.CTkButton(row, text="Sil", width=60,
+            if target > 1:
+                badge = ctk.CTkFrame(row, fg_color=theme["card_alt"], corner_radius=6)
+                badge.pack(side="right", padx=6)
+                ctk.CTkLabel(badge, text=f"🔢 {target}x Sayaç", font=ctk.CTkFont(size=10, weight="bold"),
+                             text_color=theme.get("accent", "#FB7185")).pack(padx=6, pady=2)
+
+            ctk.CTkButton(row, text="Sil", width=55,
                           fg_color=theme["btn_danger"], hover_color=theme["btn_danger_hover"],
                           text_color="#FFFFFF", corner_radius=10,
                           command=lambda t=task: self.delete_task(t)).pack(side="right", padx=6, pady=5)
@@ -1451,6 +1531,12 @@ class SettingsWindow(ctk.CTkToplevel):
         play_button_sound()
         new_task = self.task_entry.get().strip()
         if new_task and new_task not in self.parent.tasks:
+            t_str = self.target_entry.get().strip()
+            target_val = int(t_str) if (t_str.isdigit() and int(t_str) > 1) else 1
+            if not hasattr(self.parent, "task_targets"):
+                self.parent.task_targets = {}
+            self.parent.task_targets[new_task] = target_val
+
             self.parent.tasks.append(new_task)
             if "ai_target_tasks" in self.parent.settings and new_task not in self.parent.settings["ai_target_tasks"]:
                 self.parent.settings["ai_target_tasks"].append(new_task)
@@ -1459,6 +1545,7 @@ class SettingsWindow(ctk.CTkToplevel):
             self.parent.update_charts()
             self.parent.update_progress()
             self.task_entry.delete(0, "end")
+            self.target_entry.delete(0, "end")
             self.render_task_list()
             self.render_ai_target_tasks()
 
@@ -1466,6 +1553,8 @@ class SettingsWindow(ctk.CTkToplevel):
         play_button_sound()
         if task_name in self.parent.tasks:
             self.parent.tasks.remove(task_name)
+            if hasattr(self.parent, "task_targets"):
+                self.parent.task_targets.pop(task_name, None)
             if "ai_target_tasks" in self.parent.settings and task_name in self.parent.settings["ai_target_tasks"]:
                 self.parent.settings["ai_target_tasks"].remove(task_name)
             if hasattr(self.parent, "task_snooze_counts"):
@@ -1676,6 +1765,45 @@ class SettingsWindow(ctk.CTkToplevel):
                                            font=ctk.CTkFont(size=10, slant="italic"), text_color=theme["text_secondary"])
         self.notif_desc_lbl.pack(anchor="w", padx=14, pady=(0, 12))
 
+        # 4. KART: Moral & Efektiflik Puanlama Sesi
+        curr_rating = self.parent.settings.get("rating_sound", "Minimal Tık & Bip (Modern)")
+        if curr_rating not in SOUND_OPTIONS:
+            curr_rating = "Minimal Tık & Bip (Modern)"
+        self.rating_sound_var = ctk.StringVar(value=curr_rating)
+
+        c4 = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=14)
+        c4.pack(fill="x", padx=4, pady=6)
+
+        c4_head = ctk.CTkFrame(c4, fg_color="transparent")
+        c4_head.pack(fill="x", padx=14, pady=(12, 4))
+        ctk.CTkLabel(c4_head, text="⚡  Moral & Efektiflik Puanlama Sesi", font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=theme["text"]).pack(side="left")
+
+        ctk.CTkLabel(c4, text="Tablonun altındaki Moral ve Efektiflik puan kutucuklarına tıklandığında çalar.",
+                     font=ctk.CTkFont(size=10), text_color=theme["text_secondary"]).pack(anchor="w", padx=14, pady=(0, 8))
+
+        c4_row = ctk.CTkFrame(c4, fg_color="transparent")
+        c4_row.pack(fill="x", padx=14, pady=(0, 8))
+
+        self.rating_menu = ctk.CTkOptionMenu(
+            c4_row, values=sound_list, variable=self.rating_sound_var,
+            width=280, height=32, corner_radius=10,
+            fg_color=theme["btn_primary"], button_color=theme["btn_primary_hover"],
+            button_hover_color=theme["btn_primary"], text_color=theme["text"],
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.on_rating_sound_change
+        )
+        self.rating_menu.pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(c4_row, text="▶ Dinle", width=75, height=32, corner_radius=10,
+                      fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                      text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
+                      command=lambda: self.preview_btn_sound(self.rating_sound_var.get())).pack(side="left")
+
+        self.rating_desc_lbl = ctk.CTkLabel(c4, text=SOUND_OPTIONS.get(curr_rating, {}).get("desc", ""),
+                                            font=ctk.CTkFont(size=10, slant="italic"), text_color=theme["text_secondary"])
+        self.rating_desc_lbl.pack(anchor="w", padx=14, pady=(0, 12))
+
     def preview_task_sound(self, sound_name):
         info = SOUND_OPTIONS.get(sound_name)
         if info and info["on_file"]:
@@ -1707,6 +1835,13 @@ class SettingsWindow(ctk.CTkToplevel):
         self.parent.settings["notification_sound"] = s_name
         self.parent.save_data()
         self.notif_desc_lbl.configure(text=SOUND_OPTIONS.get(s_name, {}).get("desc", ""))
+        self.preview_btn_sound(s_name)
+
+    def on_rating_sound_change(self, value=None):
+        s_name = self.rating_sound_var.get()
+        self.parent.settings["rating_sound"] = s_name
+        self.parent.save_data()
+        self.rating_desc_lbl.configure(text=SOUND_OPTIONS.get(s_name, {}).get("desc", ""))
         self.preview_btn_sound(s_name)
 
     # ---------- AI BİLDİRİMLER ----------
@@ -2017,6 +2152,7 @@ class HabitTrackerApp(ctk.CTk):
 
         # Veriler (İlk kurulum varsayılanları)
         self.tasks = ["Sabah Yürüyüşü / Spor", "Kitap Oku (20 Sayfa)", "Kodlama & Proje Çalış", "Günde 2L Su İç"]
+        self.task_targets = {"Günde 2L Su İç": 8, "Kitap Oku (20 Sayfa)": 20}
         self.records = {}
         self.moral_records = {}
         self.efektiflik_records = {}
@@ -2031,6 +2167,11 @@ class HabitTrackerApp(ctk.CTk):
             "task_sound": "Mekanik & Pop İkilisi",
             "button_sound": "Krem Switch (Lofi)",
             "notification_sound": "Tatlı Kabarcık (Bubble Pop)",
+            "rating_sound": "Minimal Tık & Bip (Modern)",
+            "bonus_xp": 0,
+            "streak_freezes": 1,
+            "last_freeze_week": self.today.isocalendar()[1],
+            "last_celebrated_date": "",
             "ai_notifications_enabled": True,
             "ai_model": DEFAULT_AI_MODEL,
             "ai_personality": "Sert & Direkt",
@@ -2041,6 +2182,7 @@ class HabitTrackerApp(ctk.CTk):
         }
 
         self.load_data()
+        self.check_streak_freeze()
 
         # Geriye dönük uyumluluk
         if self.settings.get("light_theme") not in THEMES["light"]:
@@ -2053,7 +2195,13 @@ class HabitTrackerApp(ctk.CTk):
             self.settings["button_sound"] = "Krem Switch (Lofi)"
         if self.settings.get("notification_sound") not in SOUND_OPTIONS:
             self.settings["notification_sound"] = "Tatlı Kabarcık (Bubble Pop)"
+        if self.settings.get("rating_sound") not in SOUND_OPTIONS:
+            self.settings["rating_sound"] = "Minimal Tık & Bip (Modern)"
 
+        self.settings.setdefault("bonus_xp", 0)
+        self.settings.setdefault("streak_freezes", 1)
+        self.settings.setdefault("last_freeze_week", self.today.isocalendar()[1])
+        self.settings.setdefault("last_celebrated_date", "")
         self.settings.setdefault("ai_notifications_enabled", True)
         self.settings.setdefault("ai_model", DEFAULT_AI_MODEL)
         if self.settings.get("ai_model") == "Dahili Motor (Yerel/Hızlı)":
@@ -2088,6 +2236,7 @@ class HabitTrackerApp(ctk.CTk):
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self.tasks = data.get("tasks", self.tasks)
+                    self.task_targets = data.get("task_targets", getattr(self, "task_targets", {}))
                     self.records = data.get("records", {})
                     self.moral_records = data.get("moral_records", {})
                     self.efektiflik_records = data.get("efektiflik_records", {})
@@ -2103,6 +2252,7 @@ class HabitTrackerApp(ctk.CTk):
                 with open(bak_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self.tasks = data.get("tasks", self.tasks)
+                    self.task_targets = data.get("task_targets", getattr(self, "task_targets", {}))
                     self.records = data.get("records", {})
                     self.moral_records = data.get("moral_records", {})
                     self.efektiflik_records = data.get("efektiflik_records", {})
@@ -2113,6 +2263,7 @@ class HabitTrackerApp(ctk.CTk):
     def save_data(self):
         data = {
             "tasks": self.tasks,
+            "task_targets": getattr(self, "task_targets", {}),
             "records": self.records,
             "moral_records": self.moral_records,
             "efektiflik_records": self.efektiflik_records,
@@ -2137,8 +2288,58 @@ class HabitTrackerApp(ctk.CTk):
             except Exception:
                 pass
 
-    def get_task_state(self, date_obj, task_name):
+    def get_task_target(self, task_name):
+        return max(1, int(getattr(self, "task_targets", {}).get(task_name, 1)))
+
+    def get_task_val(self, date_obj, task_name):
         return self.records.get(date_obj.strftime("%Y-%m-%d"), {}).get(task_name, False)
+
+    def get_task_state(self, date_obj, task_name):
+        """Görevin o gün tamamlanıp tamamlanmadığını döndürür (True/False)."""
+        target = self.get_task_target(task_name)
+        val = self.get_task_val(date_obj, task_name)
+        if target <= 1:
+            return bool(val)
+        if isinstance(val, (int, float)):
+            return val >= target
+        return bool(val)
+
+    def get_task_count(self, date_obj, task_name):
+        """Sayaçlı görevler için o günkü mevcut sayıyı döndürür."""
+        target = self.get_task_target(task_name)
+        val = self.get_task_val(date_obj, task_name)
+        if target <= 1:
+            return 1 if val else 0
+        if isinstance(val, (int, float)):
+            return min(target, max(0, int(val)))
+        return target if val else 0
+
+    def increment_task(self, date_obj, task_name):
+        """Görevin durumunu günceller: normal görevde True/False, sayaçlı görevde +1 (dolunca 0)."""
+        target = self.get_task_target(task_name)
+        ds = date_obj.strftime("%Y-%m-%d")
+        self.records.setdefault(ds, {})
+        curr_val = self.records[ds].get(task_name, 0 if target > 1 else False)
+
+        if target <= 1:
+            new_val = not bool(curr_val)
+            self.records[ds][task_name] = new_val
+            is_completed = new_val
+            is_just_completed = new_val
+        else:
+            curr_count = curr_val if isinstance(curr_val, (int, float)) else (target if curr_val is True else 0)
+            if curr_count >= target:
+                new_val = 0
+                is_completed = False
+                is_just_completed = False
+            else:
+                new_val = curr_count + 1
+                is_completed = (new_val >= target)
+                is_just_completed = (new_val == target)
+            self.records[ds][task_name] = new_val
+
+        self.save_data()
+        return new_val, is_completed, is_just_completed
 
     def set_task_state(self, date_obj, task_name, value):
         ds = date_obj.strftime("%Y-%m-%d")
@@ -2152,6 +2353,97 @@ class HabitTrackerApp(ctk.CTk):
         else:
             self.efektiflik_records[ds] = value
         self.save_data()
+
+    # ---------- OYUNLAŞTIRMA (XP, SEVİYE & KALKAN) ----------
+    def calculate_total_xp(self):
+        """Tüm tamamlanan görevler ve bonuslarla toplam XP'yi hesaplar."""
+        total_xp = int(self.settings.get("bonus_xp", 0))
+        for ds, day_rec in self.records.items():
+            if not isinstance(day_rec, dict):
+                continue
+            day_done = 0
+            day_total = len(self.tasks)
+            for t in self.tasks:
+                target = self.get_task_target(t)
+                val = day_rec.get(t, False)
+                if target <= 1:
+                    if val:
+                        total_xp += 15
+                        day_done += 1
+                else:
+                    cnt = int(val) if isinstance(val, (int, float)) else (target if val is True else 0)
+                    total_xp += (cnt * 2)
+                    if cnt >= target:
+                        total_xp += 10
+                        day_done += 1
+            if day_total > 0 and day_done == day_total:
+                total_xp += 50
+        return max(0, total_xp)
+
+    def get_level_data(self):
+        xp = self.calculate_total_xp()
+        return get_level_info(xp)
+
+    def check_streak_freeze(self):
+        """Haftalık 1 kalkan hakkını kontrol eder."""
+        try:
+            curr_week = self.today.isocalendar()[1]
+            if self.settings.get("last_freeze_week") != curr_week:
+                self.settings["streak_freezes"] = 1
+                self.settings["last_freeze_week"] = curr_week
+                self.save_data()
+        except Exception:
+            pass
+
+    def check_daily_completion(self):
+        """Bugünün tüm görevleri bittiğinde (%100) zafer kutlaması tetikler."""
+        done, total = self.get_today_progress()
+        if total > 0 and done == total:
+            today_str = self.today.strftime("%Y-%m-%d")
+            if self.settings.get("last_celebrated_date") != today_str:
+                self.settings["last_celebrated_date"] = today_str
+                self.save_data()
+                self.trigger_celebration_popup()
+
+    def trigger_celebration_popup(self):
+        """%100 Gün Tamamlama Zafer Penceresi."""
+        theme = self.get_theme()
+        play_notification_sound()
+
+        popup = ctk.CTkToplevel(self)
+        popup.title("🎉 Günün Zaferi!")
+        popup.geometry("380x210")
+        popup.resizable(False, False)
+        popup.transient(self)
+        popup.attributes("-topmost", True)
+        popup.configure(fg_color=theme["bg"])
+
+        try:
+            px = self.winfo_x() + (self.winfo_width() - 380) // 2
+            py = self.winfo_y() + (self.winfo_height() - 210) // 2
+            popup.geometry(f"380x210+{max(0, px)}+{max(0, py)}")
+        except Exception:
+            pass
+
+        card = ctk.CTkFrame(popup, fg_color=theme["card"], corner_radius=14, border_width=2, border_color=theme["done"])
+        card.pack(fill="both", expand=True, padx=10, pady=10)
+
+        ctk.CTkLabel(card, text="🎉  TEBRİKLER!", font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color=theme["done"]).pack(pady=(16, 4))
+        ctk.CTkLabel(card, text="Bugünkü tüm görevlerini (%100) başarıyla tamamladın!",
+                     font=ctk.CTkFont(size=12, weight="bold"), text_color=theme["text"]).pack(pady=(0, 6))
+
+        xp_badge = ctk.CTkFrame(card, fg_color=theme["card_alt"], corner_radius=8)
+        xp_badge.pack(pady=4)
+        ctk.CTkLabel(xp_badge, text="⭐ +50 Bonus XP Kazanıldı!", font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color=theme.get("moral_color", "#D98A48")).pack(padx=14, pady=4)
+
+        ctk.CTkButton(card, text="Harika!", width=110, height=30, corner_radius=10,
+                      fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                      text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
+                      command=popup.destroy).pack(pady=(12, 10))
+
+        popup.after(6000, lambda: popup.destroy() if popup.winfo_exists() else None)
 
     # ---------- TEMA ----------
     def get_theme(self):
@@ -2183,6 +2475,13 @@ class HabitTrackerApp(ctk.CTk):
         # Progress
         self.progress_bar.configure(fg_color=theme["progress_bg"], progress_color=theme["progress_fg"])
         self.progress_label.configure(text_color=theme["text_secondary"])
+
+        # Level & Gamification
+        if hasattr(self, "level_badge_lbl"):
+            self.level_badge_lbl.configure(text_color=theme.get("accent", "#FB7185"))
+            self.xp_bar.configure(fg_color=theme["progress_bg"], progress_color=theme.get("moral_color", "#D98A48"))
+            self.xp_label.configure(text_color=theme["text_secondary"])
+            self.shield_lbl.configure(text_color=theme.get("efektiflik_color", "#957DC7"))
 
         # Mode switch
         self.mode_switch.configure(
@@ -2239,24 +2538,61 @@ class HabitTrackerApp(ctk.CTk):
 
         self.title_label = ctk.CTkLabel(
             self.header_frame, text="📋 Görev & Alışkanlık Takibi",
-            font=ctk.CTkFont(size=22, weight="bold"), text_color=theme["text"])
+            font=ctk.CTkFont(size=21, weight="bold"), text_color=theme["text"])
         self.title_label.pack(side="left")
 
-        # Progress bar
+        # Günlük Progress bar
         self.progress_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.progress_frame.pack(side="left", padx=(30, 0))
+        self.progress_frame.pack(side="left", padx=(20, 0))
 
-        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, width=130, height=14,
-                                                corner_radius=8,
+        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, width=105, height=12,
+                                                corner_radius=6,
                                                 fg_color=theme["progress_bg"],
                                                 progress_color=theme["progress_fg"])
-        self.progress_bar.pack(side="left", padx=(0, 8))
+        self.progress_bar.pack(side="left", padx=(0, 6))
         self.progress_bar.set(0)
 
         self.progress_label = ctk.CTkLabel(self.progress_frame, text="0/0",
-                                           font=ctk.CTkFont(size=11, weight="bold"),
+                                           font=ctk.CTkFont(size=10, weight="bold"),
                                            text_color=theme["text_secondary"])
         self.progress_label.pack(side="left")
+
+        # XP & Level Gamification Frame
+        self.level_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.level_frame.pack(side="left", padx=(20, 0))
+
+        self.level_badge_lbl = ctk.CTkLabel(
+            self.level_frame, text="⭐ Lvl 1: Çaylak",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.get("accent", "#FB7185")
+        )
+        self.level_badge_lbl.pack(side="left", padx=(0, 6))
+
+        self.xp_bar = ctk.CTkProgressBar(
+            self.level_frame, width=95, height=10,
+            corner_radius=5,
+            fg_color=theme["progress_bg"],
+            progress_color=theme.get("moral_color", "#D98A48")
+        )
+        self.xp_bar.pack(side="left", padx=(0, 6))
+        self.xp_bar.set(0)
+
+        self.xp_label = ctk.CTkLabel(
+            self.level_frame, text="0/120 XP",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text_secondary"]
+        )
+        self.xp_label.pack(side="left", padx=(0, 8))
+
+        # Shield Badge
+        self.shield_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.shield_frame.pack(side="left", padx=(8, 0))
+        self.shield_lbl = ctk.CTkLabel(
+            self.shield_frame, text="🛡️ 1 Kalkan",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme.get("efektiflik_color", "#957DC7")
+        )
+        self.shield_lbl.pack(side="left")
 
         # Sağ üst
         self.right_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
@@ -2424,6 +2760,15 @@ class HabitTrackerApp(ctk.CTk):
         self.progress_bar.set(ratio)
         self.progress_label.configure(text=f"Bugün: {done}/{total}")
 
+        # Update Level & XP Bar
+        if hasattr(self, "xp_bar"):
+            lvl_info = self.get_level_data()
+            self.level_badge_lbl.configure(text=f"{lvl_info['icon']} Lvl {lvl_info['level']}: {lvl_info['title']}")
+            self.xp_bar.set(lvl_info["ratio"])
+            self.xp_label.configure(text=f"{lvl_info['current_xp']}/{lvl_info['next_xp']} XP")
+            freezes = self.settings.get("streak_freezes", 1)
+            self.shield_lbl.configure(text=f"🛡️ {freezes} Kalkan" if freezes > 0 else "🛡️ Kalkan Yok")
+
     # ---------- ULTRA-HIZLI VE YUMUŞAK PASTEL AYLIK TABLO ----------
     def render_table(self):
         theme = self.get_theme()
@@ -2520,7 +2865,7 @@ class HabitTrackerApp(ctk.CTk):
                 fill=header_color
             )
 
-        # 4. Görev Satırları ve Kutucuklar
+        # 4. Görev Satırları ve Kutucuklar / Sayaç Rozetleri
         for r_idx, task_name in enumerate(self.tasks):
             y_top = header_h + r_idx * row_h
             y_bot = y_top + row_h
@@ -2533,47 +2878,89 @@ class HabitTrackerApp(ctk.CTk):
                     fill=theme["card_alt"], outline=""
                 )
 
+            target = self.get_task_target(task_name)
+
             # Görev Adı Metni
             canvas.create_text(
                 12, cy, text=task_name,
                 anchor="w", font=("Segoe UI", 9, "normal"), fill=theme["text"]
             )
 
-            # Her Gün İçin Kutu (Geçmiş günler görünür, sadece bugün tıklanabilir)
+            # Her Gün İçin Kutu veya Sayaç Rozeti
             for day in range(1, num_days + 1):
                 d_obj = datetime.date(year, month, day)
-                is_checked = self.get_task_state(d_obj, task_name)
                 is_today = (d_obj == self.today)
 
                 x1 = task_col_w + (day - 1) * col_w
                 x2 = x1 + col_w
                 cx = (x1 + x2) / 2
 
-                box_size = 18
-                bx1 = cx - box_size / 2
-                by1 = cy - box_size / 2
-                bx2 = cx + box_size / 2
-                by2 = cy + box_size / 2
+                if target <= 1:
+                    is_checked = self.get_task_state(d_obj, task_name)
+                    box_size = 18
+                    bx1 = cx - box_size / 2
+                    by1 = cy - box_size / 2
+                    bx2 = cx + box_size / 2
+                    by2 = cy + box_size / 2
 
-                if is_checked:
-                    # İşaretli Kutu (Geçmişte yapılmışsa da net görünür)
-                    draw_round_rect(
-                        canvas, bx1, by1, bx2, by2, r=4,
-                        fill=theme["done"], outline=theme["done"]
-                    )
-                    check_fg = "#FFFFFF" if self.settings.get("mode", "light") == "dark" else "#1A251C"
-                    canvas.create_text(
-                        cx, cy, text="✔",
-                        font=("Segoe UI", 9, "bold"),
-                        fill=check_fg
-                    )
+                    if is_checked:
+                        draw_round_rect(
+                            canvas, bx1, by1, bx2, by2, r=4,
+                            fill=theme["done"], outline=theme["done"]
+                        )
+                        check_fg = "#FFFFFF" if self.settings.get("mode", "light") == "dark" else "#1A251C"
+                        canvas.create_text(
+                            cx, cy, text="✔",
+                            font=("Segoe UI", 9, "bold"),
+                            fill=check_fg
+                        )
+                    else:
+                        border_c = theme["today_header"] if is_today else theme["checkbox_border"]
+                        draw_round_rect(
+                            canvas, bx1, by1, bx2, by2, r=4,
+                            fill=theme["checkbox_bg"], outline=border_c, width=1.5 if is_today else 1
+                        )
                 else:
-                    # İşaretsiz Kutu (Bugün ise belirgin, diğer günler hafif çerçeve)
-                    border_c = theme["today_header"] if is_today else theme["checkbox_border"]
-                    draw_round_rect(
-                        canvas, bx1, by1, bx2, by2, r=4,
-                        fill=theme["checkbox_bg"], outline=border_c, width=1.5 if is_today else 1
-                    )
+                    # Sayaçlı Görev Rozeti (örn: 3/8)
+                    cnt = self.get_task_count(d_obj, task_name)
+                    pw = max(22, min(col_w - 4, 30))
+                    ph = 18
+                    px1 = cx - pw / 2
+                    py1 = cy - ph / 2
+                    px2 = cx + pw / 2
+                    py2 = cy + ph / 2
+
+                    if cnt >= target:
+                        draw_round_rect(
+                            canvas, px1, py1, px2, py2, r=5,
+                            fill=theme["done"], outline=theme["done"]
+                        )
+                        txt_fg = "#FFFFFF" if self.settings.get("mode", "light") == "dark" else "#1A251C"
+                        canvas.create_text(
+                            cx, cy, text=f"✓{cnt}",
+                            font=("Segoe UI", 8, "bold"), fill=txt_fg
+                        )
+                    elif cnt > 0:
+                        draw_round_rect(
+                            canvas, px1, py1, px2, py2, r=5,
+                            fill=theme.get("today_col", theme["card_alt"]),
+                            outline=theme.get("accent", "#FB7185"), width=1.5
+                        )
+                        canvas.create_text(
+                            cx, cy, text=f"{cnt}/{target}",
+                            font=("Segoe UI", 7, "bold"), fill=theme["text"]
+                        )
+                    else:
+                        border_c = theme["today_header"] if is_today else theme["checkbox_border"]
+                        draw_round_rect(
+                            canvas, px1, py1, px2, py2, r=5,
+                            fill=theme["checkbox_bg"], outline=border_c, width=1.5 if is_today else 1
+                        )
+                        canvas.create_text(
+                            cx, cy, text=f"0/{target}",
+                            font=("Segoe UI", 7, "normal"),
+                            fill=theme["today_header"] if is_today else theme["text_secondary"]
+                        )
 
         # 5. Ayırıcı Çizgi
         sep_y = header_h + total_task_rows * row_h + (sep_h / 2)
@@ -2676,11 +3063,10 @@ class HabitTrackerApp(ctk.CTk):
             task_idx = int((y - geo["header_h"]) / geo["row_h"])
             if 0 <= task_idx < len(self.tasks):
                 task_name = self.tasks[task_idx]
-                curr_state = self.get_task_state(d_obj, task_name)
-                new_state = not curr_state
-                self.set_task_state(d_obj, task_name, new_state)
-                play_task_sound(is_checking=new_state)
-                if new_state:
+                new_val, is_completed, is_just_completed = self.increment_task(d_obj, task_name)
+                play_task_sound(is_checking=is_completed)
+
+                if is_completed:
                     if hasattr(self, "task_snooze_counts") and task_name in self.task_snooze_counts:
                         self.task_snooze_counts[task_name] = 0
                     if hasattr(self, "active_popups") and task_name in self.active_popups:
@@ -2688,14 +3074,16 @@ class HabitTrackerApp(ctk.CTk):
                             self.active_popups[task_name].destroy()
                         except Exception:
                             pass
+
                 self.render_table()
                 self.update_charts()
                 self.update_progress()
+                self.check_daily_completion()
                 return
 
         # 2. Moral Satırına Tıklama (Bugün)
         if geo["moral_y"] <= y < geo["moral_y"] + geo["row_h"]:
-            play_task_sound(is_checking=True)
+            play_rating_sound()
             values = ["-", "1", "2", "3", "4", "5"]
             ds = d_obj.strftime("%Y-%m-%d")
             curr_val = str(self.moral_records.get(ds, "-"))
@@ -2707,7 +3095,7 @@ class HabitTrackerApp(ctk.CTk):
 
         # 3. Efektiflik Satırına Tıklama (Bugün)
         if geo["efektiflik_y"] <= y < geo["efektiflik_y"] + geo["row_h"]:
-            play_task_sound(is_checking=True)
+            play_rating_sound()
             values = ["-", "1", "2", "3", "4", "5"]
             ds = d_obj.strftime("%Y-%m-%d")
             curr_val = str(self.efektiflik_records.get(ds, "-"))
