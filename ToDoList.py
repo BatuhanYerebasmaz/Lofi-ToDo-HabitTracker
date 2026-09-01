@@ -196,10 +196,7 @@ SOUND_OPTIONS = {
 
 
 class SoundEngine:
-    """Çok kanallı, üst üste basıldığında kesilmeyen sıfır gecikmeli ses motoru."""
-    _id = 0
-    _lock = threading.Lock()
-
+    """Windows yerel C motoruyla çalışan, sıfır gecikmeli ve sıfır thread yüküyle ses çalar."""
     @classmethod
     def play(cls, file_name):
         if not file_name:
@@ -207,22 +204,10 @@ class SoundEngine:
         file_path = os.path.join(SOUNDS_DIR, file_name)
         if not os.path.exists(file_path):
             return
-        with cls._lock:
-            cls._id = (cls._id + 1) % 16
-            ch = f"snd_ch_{cls._id}"
-
-        def _p():
-            try:
-                winmm = ctypes.windll.winmm
-                winmm.mciSendStringW(f"close {ch}", None, 0, 0)
-                p = os.path.abspath(file_path).replace("\\", "/")
-                winmm.mciSendStringW(f'open "{p}" type waveaudio alias {ch}', None, 0, 0)
-                winmm.mciSendStringW(f"play {ch} from 0 wait", None, 0, 0)
-                winmm.mciSendStringW(f"close {ch}", None, 0, 0)
-            except Exception:
-                pass
-
-        threading.Thread(target=_p, daemon=True).start()
+        try:
+            winsound.PlaySound(file_path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+        except Exception:
+            pass
 
 
 def play_task_sound(is_checking=True):
@@ -804,6 +789,9 @@ def generate_ai_roast(task_name, days_missed=0, personality="Sert & Direkt", mod
 
 def draw_round_rect(canvas, x1, y1, x2, y2, r=4, **kwargs):
     """Tkinter Canvas üzerinde pürüzsüz ve yuvarlak köşeli kutu/hap çizer."""
+    w = max(0, x2 - x1)
+    h = max(0, y2 - y1)
+    r = max(0, min(r, w // 2, h // 2))
     points = [
         x1 + r, y1,
         x2 - r, y1,
@@ -1482,6 +1470,7 @@ class GlobalHotkeyManager:
 
     def _msg_loop(self):
         try:
+            self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
             user32 = ctypes.windll.user32
             # Hotkey kaydet: Ctrl + Shift + T
             if not user32.RegisterHotKey(None, self.HOTKEY_ID, self.MOD_CONTROL | self.MOD_SHIFT, self.VK_T):
@@ -1512,7 +1501,9 @@ class GlobalHotkeyManager:
         self.running = False
         try:
             ctypes.windll.user32.UnregisterHotKey(None, self.HOTKEY_ID)
-            ctypes.windll.user32.PostQuitMessage(0)
+            if hasattr(self, "_thread_id") and self._thread_id:
+                WM_QUIT = 0x0012
+                ctypes.windll.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
         except Exception:
             pass
 
@@ -1700,28 +1691,31 @@ class StickyWidget(ctk.CTkToplevel):
         self.progress_lbl.configure(text=f"{done}/{total}")
 
     def on_task_click(self, task_name):
-        target = self.parent.get_task_target(task_name)
-        if target > 1:
-            self.parent.increment_task(self.parent.today, task_name)
-        else:
-            self.parent.toggle_task(self.parent.today, task_name)
+        new_val, is_completed, is_just_completed = self.parent.increment_task(self.parent.today, task_name)
+        play_task_sound(is_checking=is_completed)
+
+        if is_completed:
+            if hasattr(self.parent, "task_snooze_counts") and task_name in self.parent.task_snooze_counts:
+                self.parent.task_snooze_counts[task_name] = 0
+            if hasattr(self.parent, "active_popups") and task_name in self.parent.active_popups:
+                try:
+                    self.parent.active_popups[task_name].destroy()
+                except Exception:
+                    pass
+
         self.render_tasks()
         self.parent.render_table()
         self.parent.update_charts()
-        self.parent.update_progress()
+        self.parent.update_progress(update_widget=False)
         self.parent.check_daily_completion()
 
     def on_task_right_click(self, task_name):
-        target = self.parent.get_task_target(task_name)
-        if target > 1:
-            self.parent.decrement_task(self.parent.today, task_name)
-        else:
-            self.parent.set_task_state(self.parent.today, task_name, False)
-            play_task_sound(is_checking=False)
+        new_val, is_completed = self.parent.decrement_task(self.parent.today, task_name)
+        play_task_sound(is_checking=False)
         self.render_tasks()
         self.parent.render_table()
         self.parent.update_charts()
-        self.parent.update_progress()
+        self.parent.update_progress(update_widget=False)
 
     def apply_theme(self):
         theme = self.parent.get_theme()
@@ -2667,7 +2661,7 @@ class HabitTrackerApp(ctk.CTk):
             "rating_sound": "Minimalist UI Tık",
             "bonus_xp": 0,
             "streak_freezes": 1,
-            "last_freeze_week": self.today.isocalendar()[1],
+            "last_freeze_week": f"{self.today.isocalendar()[0]}-W{self.today.isocalendar()[1]}",
             "last_celebrated_date": "",
             "ai_notifications_enabled": True,
             "ai_model": DEFAULT_AI_MODEL,
@@ -2677,6 +2671,9 @@ class HabitTrackerApp(ctk.CTk):
             "ai_target_tasks": ["Sabah Yürüyüşü / Spor", "Kitap Oku (20 Sayfa)", "Kodlama & Proje Çalış", "Günde 2L Su İç"],
             "last_ai_notification_time": 0
         }
+
+        self._max_streak_cache = None
+        self._max_streak_dirty = True
 
         self.load_data()
         self.check_streak_freeze()
@@ -2697,7 +2694,7 @@ class HabitTrackerApp(ctk.CTk):
 
         self.settings.setdefault("bonus_xp", 0)
         self.settings.setdefault("streak_freezes", 1)
-        self.settings.setdefault("last_freeze_week", self.today.isocalendar()[1])
+        self.settings.setdefault("last_freeze_week", f"{self.today.isocalendar()[0]}-W{self.today.isocalendar()[1]}")
         self.settings.setdefault("last_celebrated_date", "")
         self.settings.setdefault("ai_notifications_enabled", True)
         self.settings.setdefault("ai_model", DEFAULT_AI_MODEL)
@@ -2736,6 +2733,12 @@ class HabitTrackerApp(ctk.CTk):
     # ---------- VERİ YÖNETİMİ ----------
     def load_data(self):
         if os.path.exists(DATA_FILE):
+            # Oturum başında güvenli yedek al (Tek seferlik)
+            try:
+                import shutil
+                shutil.copy2(DATA_FILE, DATA_FILE + ".bak")
+            except Exception:
+                pass
             try:
                 with open(DATA_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -2765,6 +2768,7 @@ class HabitTrackerApp(ctk.CTk):
                 pass
 
     def save_data(self):
+        self._max_streak_dirty = True
         data = {
             "tasks": self.tasks,
             "task_targets": getattr(self, "task_targets", {}),
@@ -2776,19 +2780,13 @@ class HabitTrackerApp(ctk.CTk):
         try:
             tmp_file = DATA_FILE + ".tmp"
             with open(tmp_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            if os.path.exists(DATA_FILE):
-                try:
-                    import shutil
-                    shutil.copy2(DATA_FILE, DATA_FILE + ".bak")
-                except Exception:
-                    pass
+                json.dump(data, f, ensure_ascii=False, indent=2)
             os.replace(tmp_file, DATA_FILE)
         except Exception as e:
             print(f"Veri kaydetme hatası: {e}")
             try:
                 with open(DATA_FILE, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
+                    json.dump(data, f, ensure_ascii=False, indent=2)
             except Exception:
                 pass
 
@@ -2935,10 +2933,11 @@ class HabitTrackerApp(ctk.CTk):
     def check_streak_freeze(self):
         """Haftalık 1 kalkan hakkını kontrol eder."""
         try:
-            curr_week = self.today.isocalendar()[1]
-            if self.settings.get("last_freeze_week") != curr_week:
+            iso_year, iso_week, _ = self.today.isocalendar()
+            curr_week_key = f"{iso_year}-W{iso_week}"
+            if self.settings.get("last_freeze_week") != curr_week_key:
                 self.settings["streak_freezes"] = 1
-                self.settings["last_freeze_week"] = curr_week
+                self.settings["last_freeze_week"] = curr_week_key
                 self.save_data()
         except Exception:
             pass
@@ -3391,7 +3390,7 @@ class HabitTrackerApp(ctk.CTk):
         done = sum(1 for t in self.tasks if self.get_task_state(self.today, t))
         return done, len(self.tasks)
 
-    def update_progress(self):
+    def update_progress(self, update_widget=True):
         # Update Level & XP Bar
         if hasattr(self, "xp_bar"):
             lvl_info = self.get_level_data()
@@ -3407,7 +3406,7 @@ class HabitTrackerApp(ctk.CTk):
                 freezes = self.settings.get("streak_freezes", 1)
                 self.shield_lbl.configure(text=f"🛡️ {freezes} Kalkan" if freezes > 0 else "🛡️ Kalkan Yok")
 
-        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
+        if update_widget and hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists() and self.sticky_widget.winfo_viewable():
             self.sticky_widget.render_tasks()
 
     # ---------- ULTRA-HIZLI VE YUMUŞAK PASTEL AYLIK TABLO ----------
@@ -3840,9 +3839,14 @@ class HabitTrackerApp(ctk.CTk):
         self.canvas2.get_tk_widget().pack(fill="both", expand=True, padx=2, pady=2)
 
     def get_max_streak(self):
-        """Kullanıcının geçmişten bugüne kaydettiği en uzun ardışık gün serisini hesaplar."""
+        """Kullanıcının geçmişten bugüne kaydettiği en uzun ardışık gün serisini önbellekli hızlı hesaplar."""
+        if not getattr(self, "_max_streak_dirty", True) and getattr(self, "_max_streak_cache", None) is not None:
+            return self._max_streak_cache
+
         active_dates = []
-        for ds_str in self.records:
+        for ds_str, day_rec in self.records.items():
+            if not isinstance(day_rec, dict) or not any(day_rec.values()):
+                continue
             try:
                 d_obj = datetime.date.fromisoformat(ds_str)
                 if any(self.get_task_state(d_obj, t) for t in self.tasks):
@@ -3850,6 +3854,8 @@ class HabitTrackerApp(ctk.CTk):
             except Exception:
                 pass
         if not active_dates:
+            self._max_streak_cache = 0
+            self._max_streak_dirty = False
             return 0
         active_dates = sorted(set(active_dates))
         max_s = 1
@@ -3861,6 +3867,9 @@ class HabitTrackerApp(ctk.CTk):
                     max_s = curr_s
             else:
                 curr_s = 1
+
+        self._max_streak_cache = max_s
+        self._max_streak_dirty = False
         return max_s
 
     def update_charts(self):
@@ -4142,20 +4151,11 @@ class HabitTrackerApp(ctk.CTk):
             pass
         os._exit(0)
 
-    # ---------- AI DARLAMA BİLDİRİM SİSTEMİ ----------
     def get_task_missed_days(self, task_name):
-        """Görevin geriye dönük kaç gündür aksatıldığını hesaplar (yalnızca var olduğu geçmiş kayıtlar taranır)."""
+        """Görevin geriye dönük kaç gündür aksatıldığını doğru hesaplar."""
         days = 0
         check_date = self.today - datetime.timedelta(days=1)
         for _ in range(30):
-            ds = check_date.strftime("%Y-%m-%d")
-            if ds not in self.records:
-                # Veri tabanında bu gün için hiçbir kayıt yoksa geriye gitmeyi durdur
-                break
-            rec = self.records[ds]
-            if task_name not in rec:
-                # Bu görev o tarihte henüz eklenmemişse geçmişi saymayı durdur
-                break
             if self.get_task_state(check_date, task_name):
                 # Görev o gün yapılmış/tamamlanmış, aksatma serisi sonlandı
                 break
@@ -4290,6 +4290,7 @@ def ensure_single_instance(app_instance):
     """Uygulamanın birden fazla açılmasını engeller; kısayoldan tekrar açıldığında arka plandakini öne getirir."""
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
         s.listen(5)
 
@@ -4297,6 +4298,7 @@ def ensure_single_instance(app_instance):
             while True:
                 try:
                     conn, _ = s.accept()
+                    conn.settimeout(1.0)
                     data = conn.recv(1024)
                     if b"RESTORE" in data:
                         app_instance.after(0, app_instance._do_restore)
@@ -4309,6 +4311,7 @@ def ensure_single_instance(app_instance):
     except OSError:
         try:
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.settimeout(0.5)
             client.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
             client.sendall(b"RESTORE")
             client.close()
@@ -4324,11 +4327,12 @@ if __name__ == "__main__":
     # 1. Hızlı Soket Kontrolü (Uygulama zaten açıksa 1 ms'de öne getirip GUI yüklemeden anında sonlan)
     try:
         quick_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        quick_sock.settimeout(0.5)
         quick_sock.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
         quick_sock.sendall(b"RESTORE")
         quick_sock.close()
         sys.exit(0)
-    except OSError:
+    except (OSError, socket.timeout):
         pass
 
     app = HabitTrackerApp()
