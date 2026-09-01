@@ -2472,10 +2472,6 @@ class HabitTrackerApp(ctk.CTk):
         self.title_label.configure(text_color=theme["text"])
         self.clock_label.configure(text_color=theme["accent"])
 
-        # Progress
-        self.progress_bar.configure(fg_color=theme["progress_bg"], progress_color=theme["progress_fg"])
-        self.progress_label.configure(text_color=theme["text_secondary"])
-
         # Level & Gamification
         if hasattr(self, "level_badge_lbl"):
             self.level_badge_lbl.configure(text_color=theme.get("accent", "#FB7185"))
@@ -2541,55 +2537,39 @@ class HabitTrackerApp(ctk.CTk):
             font=ctk.CTkFont(size=21, weight="bold"), text_color=theme["text"])
         self.title_label.pack(side="left")
 
-        # Günlük Progress bar
-        self.progress_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.progress_frame.pack(side="left", padx=(20, 0))
-
-        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, width=105, height=12,
-                                                corner_radius=6,
-                                                fg_color=theme["progress_bg"],
-                                                progress_color=theme["progress_fg"])
-        self.progress_bar.pack(side="left", padx=(0, 6))
-        self.progress_bar.set(0)
-
-        self.progress_label = ctk.CTkLabel(self.progress_frame, text="0/0",
-                                           font=ctk.CTkFont(size=10, weight="bold"),
-                                           text_color=theme["text_secondary"])
-        self.progress_label.pack(side="left")
-
-        # XP & Level Gamification Frame
+        # XP & Level Gamification Frame (Genişletilmiş Seviye Barı)
         self.level_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.level_frame.pack(side="left", padx=(20, 0))
+        self.level_frame.pack(side="left", padx=(30, 0))
 
         self.level_badge_lbl = ctk.CTkLabel(
             self.level_frame, text="⭐ Lvl 1: Çaylak",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=12, weight="bold"),
             text_color=theme.get("accent", "#FB7185")
         )
-        self.level_badge_lbl.pack(side="left", padx=(0, 6))
+        self.level_badge_lbl.pack(side="left", padx=(0, 10))
 
         self.xp_bar = ctk.CTkProgressBar(
-            self.level_frame, width=95, height=10,
-            corner_radius=5,
+            self.level_frame, width=250, height=13,
+            corner_radius=7,
             fg_color=theme["progress_bg"],
             progress_color=theme.get("moral_color", "#D98A48")
         )
-        self.xp_bar.pack(side="left", padx=(0, 6))
+        self.xp_bar.pack(side="left", padx=(0, 10))
         self.xp_bar.set(0)
 
         self.xp_label = ctk.CTkLabel(
             self.level_frame, text="0/120 XP",
-            font=ctk.CTkFont(size=10, weight="bold"),
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme["text_secondary"]
         )
-        self.xp_label.pack(side="left", padx=(0, 8))
+        self.xp_label.pack(side="left", padx=(0, 14))
 
         # Shield Badge
         self.shield_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.shield_frame.pack(side="left", padx=(8, 0))
+        self.shield_frame.pack(side="left", padx=(4, 0))
         self.shield_lbl = ctk.CTkLabel(
             self.shield_frame, text="🛡️ 1 Kalkan",
-            font=ctk.CTkFont(size=10, weight="bold"),
+            font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.get("efektiflik_color", "#957DC7")
         )
         self.shield_lbl.pack(side="left")
@@ -2755,11 +2735,6 @@ class HabitTrackerApp(ctk.CTk):
         return done, len(self.tasks)
 
     def update_progress(self):
-        done, total = self.get_today_progress()
-        ratio = done / total if total > 0 else 0
-        self.progress_bar.set(ratio)
-        self.progress_label.configure(text=f"Bugün: {done}/{total}")
-
         # Update Level & XP Bar
         if hasattr(self, "xp_bar"):
             lvl_info = self.get_level_data()
