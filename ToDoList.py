@@ -2268,13 +2268,10 @@ class SettingsWindow(ctk.CTkToplevel):
         m_row = ctk.CTkFrame(m_box, fg_color="transparent")
         m_row.pack(fill="x", padx=12, pady=(0, 10))
 
-        guaranteed_models = [
-            DEFAULT_AI_MODEL,
-            "Google Gemini (1.5 Flash - Hızlı & Ücretsiz)",
-            "Google Gemini (2.0 Flash - Yeni)"
-        ]
+        # Tüm yerel modelleri (Ollama, LM Studio) ve Google Gemini'yi anında tara ve birleştir
+        scanned = scan_local_ai_models()
         saved_models = self.parent.settings.get("detected_ai_models", [])
-        combined_models = list(guaranteed_models)
+        combined_models = list(scanned)
         for sm in saved_models:
             if sm not in combined_models:
                 combined_models.append(sm)
