@@ -61,6 +61,7 @@ import random
 import threading
 import ctypes
 import socket
+import winsound
 import time
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
