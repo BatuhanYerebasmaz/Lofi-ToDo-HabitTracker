@@ -2326,6 +2326,15 @@ class SettingsWindow(ctk.CTkToplevel):
                       text_color="#FFFFFF", font=ctk.CTkFont(size=10, weight="bold"),
                       command=lambda: webbrowser.open("https://aistudio.google.com/app/apikey")).pack(side="left", padx=(0, 6))
 
+        self.gemini_test_btn = ctk.CTkButton(g_btn_row, text="⚡ Test Et", height=26, corner_radius=8,
+                                             fg_color=theme["card"], hover_color=theme["btn_primary_hover"],
+                                             text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
+                                             command=self.test_gemini_connection)
+        self.gemini_test_btn.pack(side="left", padx=(0, 6))
+
+        self.gemini_status_lbl = ctk.CTkLabel(g_btn_row, text="", font=ctk.CTkFont(size=10, weight="bold"))
+        self.gemini_status_lbl.pack(side="left")
+
         # 3. Mesaj Tarzı
         p_box = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
         p_box.pack(fill="x", padx=6, pady=4)
@@ -2486,6 +2495,34 @@ class SettingsWindow(ctk.CTkToplevel):
                 self.gemini_show_btn.configure(text="👁️")
         except Exception:
             pass
+
+    def test_gemini_connection(self):
+        play_button_sound()
+        key = self.gemini_key_entry.get().strip()
+        if not key:
+            self.gemini_status_lbl.configure(text="⚠️ API anahtarı boş!", text_color="#EF4444")
+            return
+        self.gemini_status_lbl.configure(text="⏳ Bağlanıyor...", text_color=self.parent.get_theme()["text_secondary"])
+        self.gemini_test_btn.configure(state="disabled")
+
+        def _test():
+            try:
+                cur_model = self.model_var.get()
+                ans = query_gemini(key, cur_model, "Kısaca 'Tamam' yaz.")
+                def _done():
+                    self.gemini_test_btn.configure(state="normal")
+                    if ans:
+                        self.gemini_status_lbl.configure(text="✅ Bağlantı Başarılı!", text_color="#10B981")
+                    else:
+                        self.gemini_status_lbl.configure(text="❌ Geçersiz API Anahtarı!", text_color="#EF4444")
+                self.after(0, _done)
+            except Exception:
+                self.after(0, lambda: [
+                    self.gemini_test_btn.configure(state="normal"),
+                    self.gemini_status_lbl.configure(text="❌ Bağlantı Hatası!", text_color="#EF4444")
+                ])
+
+        threading.Thread(target=_test, daemon=True).start()
 
     def refresh_ai_models(self):
         play_button_sound()
