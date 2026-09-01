@@ -2293,10 +2293,11 @@ class SettingsWindow(ctk.CTkToplevel):
                                             command=self.on_model_change)
         self.model_menu.pack(side="left", padx=(0, 8))
 
-        self.scan_btn = ctk.CTkButton(m_row, text="🔄 Tara", width=90, height=28, corner_radius=8,
+        self.scan_btn = ctk.CTkButton(m_row, text="🔍 Lokali Tara", width=110, height=28, corner_radius=8,
                                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                                       text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
                                       command=self.refresh_ai_models)
+        self.scan_btn.pack(side="left")
         self.m_box = m_box
 
         # Gemini API Key Kartı
@@ -2548,7 +2549,7 @@ class SettingsWindow(ctk.CTkToplevel):
                     self.parent.settings["ai_model"] = models[0]
                 self.parent.save_data()
                 self.scan_btn.configure(text="✓ Güncellendi", state="normal")
-                self.after(2000, lambda: self.scan_btn.configure(text="🔄 Modelleri Tara"))
+                self.after(2000, lambda: self.scan_btn.configure(text="🔍 Lokali Tara"))
 
             self.after(0, _update)
 
