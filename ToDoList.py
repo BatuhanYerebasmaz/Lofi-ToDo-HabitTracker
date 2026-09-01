@@ -372,7 +372,7 @@ def get_level_info(xp):
 import urllib.request
 import urllib.error
 import subprocess
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 import pystray
 
 ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "ToDo.ico")
@@ -2048,10 +2048,24 @@ class DailyNoteModal(ctk.CTkToplevel):
         margin_line = ctk.CTkFrame(page, height=1, fg_color="#E5C7B8" if not self.is_dark else "#4D3B31")
         margin_line.pack(fill="x", padx=18, pady=(4, 10))
 
-        # 3. Polaroid / Açılı Fotoğraflar Alanı (Scrapbook Board)
-        self.photo_box = ctk.CTkFrame(page, height=145, fg_color="transparent")
-        self.photo_box.pack(fill="x", padx=14, pady=(0, 6))
-        self.photo_box.pack_propagate(False)
+        # 3. Polaroid / Açılı Fotoğraflar Alanı (Scrapbook Board - Direct Canvas)
+        self.photo_canvas = tk.Canvas(
+            page, height=140, bg=paper_bg, highlightthickness=0
+        )
+        self.photo_canvas.pack(fill="x", padx=14, pady=(0, 6))
+
+        # Yatay kaydırma desteği (Fare Tekerleği)
+        def _on_mousewheel(event):
+            if event.delta:
+                self.photo_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+            elif event.num == 4:
+                self.photo_canvas.xview_scroll(-1, "units")
+            elif event.num == 5:
+                self.photo_canvas.xview_scroll(1, "units")
+
+        self.photo_canvas.bind("<MouseWheel>", _on_mousewheel)
+        self.photo_canvas.bind("<Button-4>", _on_mousewheel)
+        self.photo_canvas.bind("<Button-5>", _on_mousewheel)
 
         self.render_polaroid_gallery()
 
@@ -2127,32 +2141,26 @@ class DailyNoteModal(ctk.CTkToplevel):
                                           outline=ring_highlight, width=1.0)
 
     def render_polaroid_gallery(self):
-        """Açılı (yamuk) polaroid fotoğrafları defter üzerine yerleştirir."""
-        for widget in self.photo_box.winfo_children():
-            widget.destroy()
+        """Açılı polaroid fotoğrafları canvas üzerine anında çizer ve butonları bağlar."""
+        self.photo_canvas.delete("all")
+        self._polaroid_refs = []
 
         valid_images = [p for p in self.note_images if os.path.exists(p)]
         self.note_images = valid_images
 
         if not self.note_images:
-            empty_box = ctk.CTkFrame(self.photo_box, fg_color="transparent")
-            empty_box.pack(fill="both", expand=True)
             empty_msg = "Henüz fotoğraf eklenmemiş." if not self.is_today else "📌 Üstteki '📷 + Fotoğraf İğnele' butonuyla deftere polaroid fotoğraflar ekleyebilirsiniz."
-            ctk.CTkLabel(
-                empty_box, text=empty_msg,
-                font=ctk.CTkFont(size=10, slant="italic"),
-                text_color=self.theme["text_secondary"]
-            ).pack(expand=True, pady=30)
-            self.update_idletasks()
+            sub_col = "#7D6B5D" if not self.is_dark else "#A8988B"
+            self.photo_canvas.create_text(
+                280, 70, text=empty_msg,
+                font=("Segoe UI", 10, "italic"), fill=sub_col, anchor="center"
+            )
+            self.photo_canvas.config(scrollregion=(0, 0, 560, 140))
             return
 
-        scroll = ctk.CTkScrollableFrame(
-            self.photo_box, height=140, orientation="horizontal",
-            fg_color="transparent"
-        )
-        scroll.pack(fill="both", expand=True)
+        x_cursor = 18
+        y_center = 70
 
-        self._polaroid_refs = []
         for idx, img_path in enumerate(self.note_images):
             try:
                 angle = self._ANGLES[idx % len(self._ANGLES)]
@@ -2160,36 +2168,56 @@ class DailyNoteModal(ctk.CTkToplevel):
                 if not polaroid_img:
                     continue
 
-                ctk_img = ctk.CTkImage(light_image=polaroid_img, dark_image=polaroid_img, size=polaroid_img.size)
-                self._polaroid_refs.append(ctk_img)
+                tk_img = ImageTk.PhotoImage(polaroid_img)
+                self._polaroid_refs.append(tk_img)
 
-                card = ctk.CTkFrame(scroll, fg_color="transparent", width=polaroid_img.width, height=polaroid_img.height)
-                card.pack(side="left", padx=6, pady=2)
-                card.pack_propagate(False)
+                pw = polaroid_img.width
+                ph = polaroid_img.height
+                cx = x_cursor + pw // 2
+                cy = y_center
 
-                btn_img = ctk.CTkButton(
-                    card, text="", image=ctk_img,
-                    width=polaroid_img.width, height=polaroid_img.height,
-                    fg_color="transparent", hover_color=self.theme["btn_primary_hover"],
-                    corner_radius=8, cursor="hand2",
-                    command=lambda p=img_path: self.open_full_image(p)
+                img_tag = f"photo_{idx}"
+                del_tag = f"del_{idx}"
+
+                # 1. Polaroid Fotoğraf Resmi
+                self.photo_canvas.create_image(
+                    cx, cy, image=tk_img,
+                    tags=("photo_item", img_tag)
                 )
-                btn_img.pack(fill="both", expand=True)
 
+                # 2. Silme Çarpı Butonu (Kırmızı Daire + Beyaz Çarpı)
                 if self.is_today:
-                    btn_del = ctk.CTkButton(
-                        card, text="✕", width=22, height=22, corner_radius=11,
-                        fg_color="#EF4444", hover_color="#DC2626",
-                        text_color="#FFFFFF", font=ctk.CTkFont(size=10, weight="bold"),
-                        cursor="hand2",
-                        command=lambda p=img_path: self.remove_image(p)
+                    bx = cx + pw // 2 - 12
+                    by = cy - ph // 2 + 10
+                    r = 10
+                    self.photo_canvas.create_oval(
+                        bx - r, by - r, bx + r, by + r,
+                        fill="#EF4444", outline="#DC2626", width=1,
+                        tags=("del_item", del_tag)
                     )
-                    btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
-                    btn_del.lift()
-            except Exception as e:
-                print(f"Polaroid fotoğraf yüklenemedi: {e}")
+                    self.photo_canvas.create_text(
+                        bx, by, text="✕",
+                        font=("Segoe UI", 8, "bold"), fill="#FFFFFF",
+                        tags=("del_item", del_tag)
+                    )
 
-        self.update_idletasks()
+                    # Silme Tıklaması
+                    self.photo_canvas.tag_bind(del_tag, "<Button-1>", lambda e, p=img_path: self.remove_image(p))
+
+                # Fotoğrafa Büyütme Tıklaması
+                self.photo_canvas.tag_bind(img_tag, "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
+
+                x_cursor += pw + 16
+            except Exception as e:
+                print(f"Polaroid çizim hatası: {e}")
+
+        # Hover İmleçleri (El İşareti)
+        self.photo_canvas.tag_bind("photo_item", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
+        self.photo_canvas.tag_bind("photo_item", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
+        self.photo_canvas.tag_bind("del_item", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
+        self.photo_canvas.tag_bind("del_item", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
+
+        self.photo_canvas.config(scrollregion=(0, 0, max(560, x_cursor + 20), 140))
 
     def add_image(self):
         files = filedialog.askopenfilenames(
