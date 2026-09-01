@@ -25,13 +25,9 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ---
 
 ### 📖 2. Otantik Defter & Polaroid Fotoğraf Scrapbook'u
-* **📓 Tek Yapraklı Spiralli Kraft Defter:** Beyaz başlık çubuğu olmayan, Windows GDI destekli pürüzsüz yuvarlak köşeli (`SetWindowRgn`), serbest sürüklenebilir modern çerçevesiz tasarım.
-* **📸 Sürükle & Bırak (Drag & Drop):** Bilgisayarınızdaki veya web'den indirdiğiniz fotoğrafları doğrudan defter sayfasına sürükleyip bırakarak albüme ekleme (`TkinterDnD`).
-* **🎞️ Açılı Polaroid Galerisi:** Fotoğrafları doğal eğim açılarıyla, washi tape (dekoratif bant) ve beyaz polaroid çerçevesiyle sergileme.
+* **📸 Sürükle & Bırak (Drag & Drop):** Bilgisayarınızdaki veya web'den indirdiğiniz fotoğrafları doğrudan defter sayfasına sürükleyip bırakarak albüme ekleme.
 * **🧭 EXIF Oryantasyon Desteği:** Cep telefonundan (iPhone/Android) aktarılan fotoğrafların yan/ters dönmesini engelleyen otomatik yön düzeltme.
 * **⚡ Ultra-Hızlı Açılış:** Polaroid önbellekleme (`_POLAROID_CACHE`) ve thumbnail ön-ölçeklendirme sayesinde onlarca fotoğrafa rağmen gecikmesiz anında açılış.
-* **✍️ 14 Punto El Yazısı & Canlı İstatistik:** `Segoe Print` fontu ile ferah el yazısı deneyimi, canlı kelime ve karakter sayacı.
-* **🧹 Otomatik Depolama Temizliği:** Silinen fotoğrafları diskten anında temizleyen ve sahipsiz medya artıklarını önleyen akıllı temizleyici.
 
 ---
 
@@ -47,7 +43,6 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 * **📊 Haftalık Trend (Bar Grafik):** Dolgun çubuklar, günün öne çıkarılması ve her çubuğun üzerinde tamamlanan görev sayı etiketleri (`4`, `8`, vb.).
 * **🍩 Aylık Odak (Donut / Halka Grafik):** Ortasında büyük **`% Başarı Oranı`** ve `Tamamlanan/Toplam` görev sayısını gösteren modern donut grafik.
 * **🔒 Sabit ve Sarsıntısız Kart Düzeni:** Grid `uniform` kilidi sayesinde Alışkanlık Özeti içerisindeki yazı uzunlukları değişse bile sol grafiklerin yeri kesinlikle oynamaz.
-* **🔄 Bağımsız Ay Gezinmesi:** Aylık Odak grafiğindeki `<` ve `>` butonları sadece grafiğin ayını değiştirir; alttaki takip tablosunun takvimini bozmaz.
 * **🏆 3 Mini İstatistik Kartı:**
   * **👑 En Uzun Seri:** Tüm zamanların en yüksek kesintisiz gün rekoru.
   * **⚡ Bu Ay Başarı:** Seçili ayda tamamlanan toplam görev ve başarı yüzdesi.
@@ -88,7 +83,6 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 * **🎵 20 Farklı Mekanik & Lofi Ses Efekti:** 
   * Görev tamamlama, buton tıklama, bildirimler ve moral/efektiflik puanlama için **4 bağımsız ses kanalı**.
   * Mekanik klavyeler (Gateron Brown, Oreo Tactile), retro kasetçalar, daktilo ve yumuşak akustik tıklar.
-* **🛡️ Windows Katı Tekil Çalışma (`SO_EXCLUSIVEADDRUSE`):** Arka planda %0 CPU ile sessizce çalışır; masaüstü kısayoluna tekrar basıldığında yeni kopya açmaz, mevcut programı anında öne getirip büyütür.
 
 ---
 
