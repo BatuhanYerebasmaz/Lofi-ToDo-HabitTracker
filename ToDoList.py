@@ -1836,12 +1836,14 @@ class SettingsWindow(ctk.CTkToplevel):
                                        fg_color=theme["entry_bg"], border_color=theme["entry_border"],
                                        text_color=theme["text"])
         self.task_entry.pack(side="left", padx=(0, 6))
+        self.task_entry.bind("<Return>", lambda e: self.add_task())
 
         self.target_entry = ctk.CTkEntry(inp, placeholder_text="Hedef (1)", width=80,
                                          corner_radius=10,
                                          fg_color=theme["entry_bg"], border_color=theme["entry_border"],
                                          text_color=theme["text"])
         self.target_entry.pack(side="left", padx=(0, 6))
+        self.target_entry.bind("<Return>", lambda e: self.add_task())
 
         ctk.CTkButton(inp, text="Ekle", width=75, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
@@ -2897,8 +2899,7 @@ class HabitTrackerApp(ctk.CTk):
                         total_xp += 15
                         day_done += 1
                     elif cnt > 0:
-                        step_xp = 15 // target
-                        total_xp += (cnt * step_xp)
+                        total_xp += ((cnt * 15) // target)
             if day_total > 0 and day_done == day_total:
                 total_xp += 50
         return max(0, total_xp)
@@ -2918,10 +2919,14 @@ class HabitTrackerApp(ctk.CTk):
             if has_done:
                 streak += 1
                 cur_d -= datetime.timedelta(days=1)
-            elif freezes > 0 and streak > 0:
-                # Kalkan bu 1 günlük kaçırmayı seriyi bozmadan korur
-                freezes -= 1
-                cur_d -= datetime.timedelta(days=1)
+            elif freezes > 0:
+                prev_d = cur_d - datetime.timedelta(days=1)
+                prev_done = any(self.get_task_state(prev_d, t) for t in self.tasks) if self.tasks else False
+                if streak > 0 or prev_done:
+                    freezes -= 1
+                    cur_d -= datetime.timedelta(days=1)
+                else:
+                    break
             else:
                 break
         return streak
