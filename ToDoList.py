@@ -301,9 +301,12 @@ def create_tray_icon_image():
     return img
 
 
+DEFAULT_AI_MODEL = "Dahili Baskıcı AI Motoru (Yerel/Hızlı)"
+
+
 def scan_local_ai_models():
     """Ollama ve LM Studio yerel modellerini diskten ve canlı portlardan anında (0ms) tarar."""
-    models = ["Dahili Baskıcı AI Motoru (Yerel/Hızlı)"]
+    models = [DEFAULT_AI_MODEL]
     found_set = set()
 
     # 1. Ollama Disk Manifest Taraması (Ollama servisi kapalı olsa dahi diskteki modelleri 1ms'de bulur)
@@ -332,9 +335,9 @@ def scan_local_ai_models():
                         found_set.add(label)
                         models.append(label)
 
-    # 3. Canlı Ollama / LM Studio API Taraması (Aktif çalışıyorsa anlık çeker)
+    # 3. Canlı Ollama / LM Studio API Taraması (Aktif çalışıyorsa anlık 127.0.0.1 çeker)
     try:
-        req = urllib.request.Request("http://localhost:11434/api/tags")
+        req = urllib.request.Request("http://127.0.0.1:11434/api/tags")
         with urllib.request.urlopen(req, timeout=0.15) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             for m in data.get("models", []):
@@ -348,7 +351,7 @@ def scan_local_ai_models():
         pass
 
     try:
-        req = urllib.request.Request("http://localhost:1234/v1/models")
+        req = urllib.request.Request("http://127.0.0.1:1234/v1/models")
         with urllib.request.urlopen(req, timeout=0.15) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             for m in data.get("data", []):
@@ -1272,6 +1275,7 @@ class NotificationPopup(ctk.CTkToplevel):
                               command=self._on_dismiss_today).pack(side="left", fill="x", expand=True, padx=3)
 
             play_notification_sound()
+            self.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
         self._auto_close_job = self.after(30000, self._on_snooze)
 
@@ -1282,6 +1286,20 @@ class NotificationPopup(ctk.CTkToplevel):
             except Exception:
                 pass
             self._auto_close_job = None
+
+    def destroy(self):
+        self._cancel_auto_close()
+        if hasattr(self, "parent") and hasattr(self.parent, "active_popups") and self.task_name in self.parent.active_popups:
+            if self.parent.active_popups.get(self.task_name) is self:
+                self.parent.active_popups.pop(self.task_name, None)
+        try:
+            super().destroy()
+        except Exception:
+            pass
+
+    def _on_close_window(self):
+        self._cancel_auto_close()
+        self.destroy()
 
     def _on_done(self):
         self._cancel_auto_close()
@@ -1428,6 +1446,7 @@ class SettingsWindow(ctk.CTkToplevel):
             self.parent.update_progress()
             self.task_entry.delete(0, "end")
             self.render_task_list()
+            self.render_ai_target_tasks()
 
     def delete_task(self, task_name):
         play_button_sound()
@@ -1447,6 +1466,7 @@ class SettingsWindow(ctk.CTkToplevel):
             self.parent.update_charts()
             self.parent.update_progress()
             self.render_task_list()
+            self.render_ai_target_tasks()
 
     # ---------- TEMA ----------
     def setup_theme_tab(self, theme):
@@ -1730,9 +1750,9 @@ class SettingsWindow(ctk.CTkToplevel):
         m_row.pack(fill="x", padx=12, pady=(0, 10))
 
         saved_models = self.parent.settings.get("detected_ai_models", [
-            "Dahili Motor (Yerel/Hızlı)",
+            DEFAULT_AI_MODEL,
         ])
-        cur_model = self.parent.settings.get("ai_model", "Dahili Motor (Yerel/Hızlı)")
+        cur_model = self.parent.settings.get("ai_model", DEFAULT_AI_MODEL)
         if cur_model not in saved_models:
             saved_models.append(cur_model)
 
@@ -1833,12 +1853,29 @@ class SettingsWindow(ctk.CTkToplevel):
         ctk.CTkLabel(t_box, text="Hangi görevler için bildirim gönderilsin?",
                      font=ctk.CTkFont(size=11),
                      text_color=theme["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 6))
+
+        self.ai_target_tasks_box = ctk.CTkFrame(t_box, fg_color="transparent")
+        self.ai_target_tasks_box.pack(fill="x", padx=12, pady=(0, 10))
+        self.render_ai_target_tasks()
+
+        # Alt kaydırma boşluğu
+        ctk.CTkFrame(scroll, height=20, fg_color="transparent").pack()
+
+    def render_ai_target_tasks(self):
+        """AI Darlama sekmesindeki hedef görev seçim kutucuklarını güncel görev listesine göre yeniden çizer."""
+        if not hasattr(self, "ai_target_tasks_box") or not self.ai_target_tasks_box.winfo_exists():
+            return
+
+        for w in self.ai_target_tasks_box.winfo_children():
+            w.destroy()
+
+        theme = self.parent.get_theme()
         target_tasks = self.parent.settings.get("ai_target_tasks", list(self.parent.tasks))
         self.task_check_vars = {}
 
         for task_name in self.parent.tasks:
-            t_row = ctk.CTkFrame(t_box, fg_color="transparent")
-            t_row.pack(fill="x", padx=12, pady=2)
+            t_row = ctk.CTkFrame(self.ai_target_tasks_box, fg_color="transparent")
+            t_row.pack(fill="x", pady=2)
 
             var = ctk.BooleanVar(value=(task_name in target_tasks))
             self.task_check_vars[task_name] = var
@@ -1852,15 +1889,9 @@ class SettingsWindow(ctk.CTkToplevel):
             cb.pack(side="left")
 
         if not self.parent.tasks:
-            ctk.CTkLabel(t_box, text="Henüz görev eklenmemiş.",
+            ctk.CTkLabel(self.ai_target_tasks_box, text="Henüz görev eklenmemiş.",
                          font=ctk.CTkFont(size=11),
-                         text_color=theme["text_secondary"]).pack(padx=12, pady=8)
-
-        # Son padding
-        ctk.CTkFrame(t_box, height=6, fg_color="transparent").pack()
-
-        # Alt kaydırma boşluğu
-        ctk.CTkFrame(scroll, height=20, fg_color="transparent").pack()
+                         text_color=theme["text_secondary"]).pack(pady=8)
 
     def on_ai_toggle(self):
         play_button_sound()
@@ -1978,6 +2009,7 @@ class HabitTrackerApp(ctk.CTk):
         self.task_snooze_counts = {}
         self.today_dismissed_tasks = set()
         self.task_scheduled_times = {}
+        self.active_popups = {}
         self.settings = {
             "mode": "light",
             "light_theme": "Latte & Şeftali",
@@ -1986,7 +2018,7 @@ class HabitTrackerApp(ctk.CTk):
             "button_sound": "Krem Switch (Lofi)",
             "notification_sound": "Tatlı Kabarcık (Bubble Pop)",
             "ai_notifications_enabled": True,
-            "ai_model": "Dahili Baskıcı AI Motoru (Yerel/Hızlı)",
+            "ai_model": DEFAULT_AI_MODEL,
             "ai_personality": "Sert & Direkt",
             "ai_custom_prompt": "",
             "ai_interval": "45 Dk",
@@ -2009,10 +2041,12 @@ class HabitTrackerApp(ctk.CTk):
             self.settings["notification_sound"] = "Tatlı Kabarcık (Bubble Pop)"
 
         self.settings.setdefault("ai_notifications_enabled", True)
-        self.settings.setdefault("ai_model", "Dahili Motor (Yerel/Hızlı)")
+        self.settings.setdefault("ai_model", DEFAULT_AI_MODEL)
+        if self.settings.get("ai_model") == "Dahili Motor (Yerel/Hızlı)":
+            self.settings["ai_model"] = DEFAULT_AI_MODEL
         self.settings.setdefault("ai_personality", "Sert & Direkt")
         self.settings.setdefault("ai_custom_prompt", "")
-        self.settings.setdefault("ai_interval", "30 Dk")
+        self.settings.setdefault("ai_interval", "45 Dk")
         self.settings.setdefault("ai_target_tasks", list(self.tasks))
         self.settings.setdefault("last_ai_notification_time", 0)
 
@@ -2335,6 +2369,13 @@ class HabitTrackerApp(ctk.CTk):
 
     # ---------- SAAT (OPTİMİZE EDİLMİŞ) ----------
     def update_clock(self):
+        if hasattr(self, "_clock_job") and self._clock_job:
+            try:
+                self.after_cancel(self._clock_job)
+            except Exception:
+                pass
+            self._clock_job = None
+
         now = datetime.datetime.now()
         new_today = now.date()
         if new_today != self.today:
@@ -2347,13 +2388,13 @@ class HabitTrackerApp(ctk.CTk):
             self.render_table()
             self.update_charts()
 
-        # Pencere gizliyken arayüz saat metnini güncellemeye gerek yok (işlemci tasarrufu)
+        month_name = TURKISH_MONTHS.get(now.month, "")
+        self.clock_label.configure(text=f"{now.day} {month_name} {now.year}  |  {now.strftime('%H:%M:%S')}")
+
         if self.winfo_viewable():
-            month_name = TURKISH_MONTHS[now.month]
-            self.clock_label.configure(text=f"{now.day} {month_name} {now.year}  |  {now.strftime('%H:%M:%S')}")
-            self.after(1000, self.update_clock)
+            self._clock_job = self.after(1000, self.update_clock)
         else:
-            self.after(60000, self.update_clock)
+            self._clock_job = self.after(60000, self.update_clock)
 
     # ---------- PROGRESS ----------
     def get_today_progress(self):
@@ -2878,6 +2919,7 @@ class HabitTrackerApp(ctk.CTk):
         self.lift()
         self.focus_force()
         self.apply_app_icon()
+        self.update_clock()
         self.attributes("-topmost", True)
         self.after(250, lambda: self.attributes("-topmost", False))
 
@@ -2981,7 +3023,18 @@ class HabitTrackerApp(ctk.CTk):
         theme = self.get_theme()
         pers = self.settings.get("ai_personality", "Sert & Direkt")
         snooze_cnt = force_snooze_count if force_snooze_count is not None else getattr(self, "task_snooze_counts", {}).get(task_name, 0)
-        NotificationPopup(self, task_name, message, theme, is_ai=True, personality=pers, snooze_count=snooze_cnt)
+
+        # Eğer bu görev için açık bir popup varsa önce onu kapat
+        if hasattr(self, "active_popups") and task_name in self.active_popups:
+            try:
+                self.active_popups[task_name].destroy()
+            except Exception:
+                pass
+
+        popup = NotificationPopup(self, task_name, message, theme, is_ai=True, personality=pers, snooze_count=snooze_cnt)
+        if hasattr(self, "active_popups"):
+            self.active_popups[task_name] = popup
+
         self.settings["last_ai_notification_time"] = time.time()
         self.save_data()
 
@@ -3058,6 +3111,16 @@ def ensure_single_instance(app_instance):
 #  BAŞLAT
 # ============================================================
 if __name__ == "__main__":
+    # 1. Hızlı Soket Kontrolü (Uygulama zaten açıksa 1 ms'de öne getirip GUI yüklemeden anında sonlan)
+    try:
+        quick_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        quick_sock.connect(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        quick_sock.sendall(b"RESTORE")
+        quick_sock.close()
+        sys.exit(0)
+    except OSError:
+        pass
+
     app = HabitTrackerApp()
     app.lock_socket = ensure_single_instance(app)
     app.mainloop()
