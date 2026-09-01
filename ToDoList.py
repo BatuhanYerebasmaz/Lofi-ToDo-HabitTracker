@@ -2879,7 +2879,7 @@ class HabitTrackerApp(ctk.CTk):
 
     # ---------- OYUNLAŞTIRMA (XP, SEVİYE & KALKAN) ----------
     def calculate_total_xp(self):
-        """Tüm tamamlanan görevler ve bonuslarla toplam XP'yi hesaplar."""
+        """Tüm tamamlanan görevler, sayaç adımları ve bonuslarla toplam XP'yi hesaplar."""
         total_xp = int(self.settings.get("bonus_xp", 0))
         for ds, day_rec in self.records.items():
             if not isinstance(day_rec, dict):
@@ -2898,6 +2898,9 @@ class HabitTrackerApp(ctk.CTk):
                     if cnt >= target:
                         total_xp += 15
                         day_done += 1
+                    elif cnt > 0:
+                        step_xp = 15 // target
+                        total_xp += (cnt * step_xp)
             if day_total > 0 and day_done == day_total:
                 total_xp += 50
         return max(0, total_xp)

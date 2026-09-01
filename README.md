@@ -9,7 +9,8 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ### 🎮 1. Oyunlaştırma, XP & Seviye Sistemi (Level Up)
 * **⭐ Seviye & XP İlerleme Barı:** Başlığın yanında canlı seviye göstergesi ve dinamik XP çubuğu.
 * **🌟 XP Kazanma Mekanikleri:**
-  * Her tamamlanan görev (standart veya sayaçlı hedef): `+15 XP`
+  * Her tamamlanan standart görev: `+15 XP`
+  * Sayaçlı görevler: Toplam 15 XP adım sayısına orantılı bölünür; her adımda payını verir ve hedefe ulaşıldığında kalanla birlikte tam `+15 XP` tamamlanır (Örn: 5 adımlık görevde adım başı `+3 XP`, 8 adımlık görevde adım başı `+1 XP` ve bitişte kalan `+8 XP`).
   * Günlük %100 tamamlama: `+50 Bonus XP`
 * **🏆 Seviye Skalası:**
   * **Lvl 1:** 🐣 Çaylak Başlangıç (0 - 49 XP)
