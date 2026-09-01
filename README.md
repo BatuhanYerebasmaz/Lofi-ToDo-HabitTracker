@@ -7,12 +7,17 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ## ✨ Temel Özellikler
 
 ### 🎮 1. Oyunlaştırma, XP & Seviye Sistemi (Level Up)
-* **⭐ Seviye & XP İlerleme Barı:** Başlığın yanında canlı seviye göstergesi ve dinamik XP çubuğu 
+* **⭐ Seviye & XP İlerleme Barı:** Başlığın yanında canlı seviye göstergesi ve dinamik XP çubuğu.
 * **🌟 XP Kazanma Mekanikleri:**
   * Her tamamlanan standart görev: `+15 XP`
   * Sayaçlı görev adımları: `+2 XP` (hedef tamamlandığında `+10 XP`)
   * Günlük %100 tamamlama: `+50 Bonus XP`
-* **🏆 Seviye & Unvan Skalası:**
+* **🏆 Seviye Skalası:**
+  * **Lvl 1:** 🐣 Çaylak Başlangıç (0 - 49 XP)
+  * **Lvl 2:** 🌿 Alışkanlık Tohumu (50 - 119 XP)
+  * **Lvl 3:** ⚡ Odak Çırağı (120 - 199 XP)
+  * **Lvl 4:** 🛡️ Disiplin Savaşçısı (200 - 299 XP)
+  * **Lvl 5+:** 👑 Odak Efendisi (300+ XP)
 * **🔥 Günlük Seri (Streak):** Düzenli tamamlanan ardışık gün sayısı takibi.
 * **🛡️ Zincir Koruma Kalkanı (Streak Freeze):** Haftalık 1 kalkan hakkı ile 1 günlük aksamalarda serinizi kırmadan koruma.
 * **🎉 Günün Zaferi Kutlaması:** Günlük tüm görevler (%100) bittiğinde özel zafer penceresi ve kutlama sesi.
@@ -40,25 +45,28 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ### 📅 4. Aylık Takip Tablosu & Minimalist Gezinme
 * **🎨 Pastel Aylık Matris Tablosu:** Ayın tüm günlerini (1-31) tek ekranda ultra-hızlı ve yumuşak pastel renklerle gösterir.
 * **⚡ Günlük Moral & Efektiflik Takibi:** Her gün için 1-5 arası moral ve verimlilik puanlaması.
-* **💊 Minimalist Ay Gezinme Kapsülü:** Tablonun hemen altındaki zarif kapsülle geçmiş ve gelecek ayların kayıtları arasında hızlıca gezinme; ay adına tıklandığında anında geçerli aya geri dönme.
+* **💊 Minimalist Ay Gezinme Kapsülü:** Tablonun hemen altındaki zarif kapsülle geçmiş ve gelecek ayların kayıtları arasında hızlıca gezinme;
 
 ---
 
 ### 🤖 5. Yapay Zeka Darlama & Hatırlatma Motoru
 * **🧠 Yerel & Bulut LLM Desteği:**
-  * **Google Gemini API (Ücretsiz):** Google AI Studio API anahtarıyla buluttan ışık hızında çalışan `Gemini 1.5 Flash` ve `Gemini 2.0 Flash` modelleri.
+  * **Google Gemini API (Ücretsiz):** Google AI Studio API anahtarıyla buluttan ışık hızında çalışan `Google Gemini 1.5 Flash (API Key Gerekli - Ücretsiz)` ve `Google Gemini 2.0 Flash (API Key Gerekli - Yeni)` modelleri.
+  * **⚡ Canlı API Bağlantı Testi:** Ayarlar penceresinden `⚡ Test Et` butonuna basarak Google Gemini bağlantınızı anında doğrulama.
   * **Dahili Yerel Motor:** Harici hiçbir kurulum gerektirmeyen hazır çevrimdışı motor.
-  * **Ollama & LM Studio:** Kendi bilgisayarınızdaki yerel açık kaynak modeller.
-* **🎭 Farklı Kişilik Modları:** *Sert & Direkt*, *İğneleyici / Alaycı*, *Pasif Agresif*, *Motive Edici / Koçluk* ve *Özel Prompt*.
+  * **Ollama & LM Studio:** Kendi bilgisayarınızdaki yerel açık kaynak modeller
+* **🎭 Farklı Kişilik Modları:** *Sert & Direkt*, *Alaycı & Esprili*, *Motivasyonel* ve *Özel Prompt*.
 * **⏰ Akıllı Zamanlama:** Görevler için rastgele aralıklarla bağımsız bildirimler ve 30 saniyelik otomatik erteleme mekanizması.
 * **⚠️ Otantik Windows Hata Penceresi:** Bildirimler 3 kez ertelendiğinde gerçek sistem hata diyalogu hissi veren dinamik arayüz.
 
 ---
 
 ### 📌 6. Kayan Mini Widget (Sticky Mode) & Global Kısayol
-* **📌 Kayan Mini Görev Kartı (Always-on-Top):** Ekranın köşesinde her zaman üstte duran, sürüklenebilir ve minimalist kompakt görev takip penceresi.
-* **⌨️ Global Klavye Kısayolu (`Ctrl+Shift+T`):** Hangi uygulamada veya oyunda olursanız olun klavyeden `Ctrl+Shift+T` basarak uygulamayı veya mini widget'ı anında açıp gizleme (%0 CPU).
-* **🕹️ Kolay Kontrol:** Ana pencere başlığındaki `📌 Mini` butonu, Ayarlar > *📌 Kayan Widget* sekmesi veya Sistem Tepsisi menüsü üzerinden tek tıkla açma/kapatma.
+* **📌 Kayan Mini Görev Kartı (Always-on-Top):** Ekranın köşesinde her zaman üstte duran, kenar çizgisiz, yumuşak yuvarlak pastel kart tasarımı.
+* **🔄 Karşılıklı Geçiş (Mutually Exclusive):**
+  * Ana ekrandan `📌 Mini` butonuna basıldığında ana ekran otomatik gizlenir ve sadece mini widget ekranda kalır.
+  * Mini widget üzerindeki `↗` butonuna basıldığında mini widget kapanır ve ana ekran geri gelir.
+* **⌨️ Global Klavye Kısayolu (`Ctrl+Shift+T`):** Hangi uygulamada veya oyunda olursanız olun klavyeden `Ctrl+Shift+T` basarak ana ekran ile mini widget arasında anında geçiş yapma (%0 CPU).
 
 ---
 
