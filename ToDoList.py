@@ -3941,9 +3941,9 @@ class HabitTrackerApp(ctk.CTk):
         for i, d_obj in enumerate(week_dates):
             cnt = daily_counts[i]
             if d_obj == self.today:
-                bars[i].set_color(theme["done"])
-                bars[i].set_edgecolor(theme.get("accent", "#FB7185"))
-                bars[i].set_linewidth(1.5)
+                bars[i].set_color(theme["chart_bar2"])
+                bars[i].set_edgecolor(theme["chart_bg"])
+                bars[i].set_linewidth(0.5)
             if cnt > 0:
                 self.ax1.text(i, cnt + (max_val * 0.04), str(cnt),
                               ha="center", va="bottom", fontsize=7.5, fontweight="bold",
@@ -3952,6 +3952,15 @@ class HabitTrackerApp(ctk.CTk):
         self.ax1.set_ylim(0, max_val + max(1, int(max_val * 0.22)))
         self.ax1.yaxis.set_major_locator(ticker.MaxNLocator(integer=True, nbins=min(max_val + 1, 4)))
         self.ax1.tick_params(axis="both", colors=theme["chart_text"], labelsize=7.5)
+
+        # X ekseni gün isimlerinde bugünü temanın kendi özel başlık rengiyle vurgula
+        for i, tick_lbl in enumerate(self.ax1.get_xticklabels()):
+            if i < len(week_dates) and week_dates[i] == self.today:
+                tick_lbl.set_color(theme["today_header"])
+                tick_lbl.set_fontweight("bold")
+            else:
+                tick_lbl.set_color(theme["chart_text"])
+
         self.ax1.spines["top"].set_visible(False)
         self.ax1.spines["right"].set_visible(False)
         self.ax1.spines["left"].set_color(theme["chart_grid"])
