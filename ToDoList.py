@@ -2172,7 +2172,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             action_box, text="✕", width=28, height=28, corner_radius=14,
             fg_color=paper_border, hover_color=theme.get("btn_danger", "#EF4444"),
             text_color=sub_text_color, font=ctk.CTkFont(size=11, weight="bold"),
-            command=self.destroy
+            command=self.close_modal
         ).pack(side="right")
 
         if self.is_today:
@@ -2402,6 +2402,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.photo_canvas.config(scrollregion=(0, 0, max(560, x_cursor + 20), 125))
 
     def add_image(self):
+        play_button_sound()
         files = filedialog.askopenfilenames(
             parent=self,
             title="Fotoğraf Seç (Deftere İğnele)",
@@ -2527,6 +2528,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 webbrowser.open(img_path)
 
     def save_note(self):
+        play_button_sound()
         text = self.textbox.get("1.0", "end-1c").strip()
         if text or self.note_images:
             self.parent.daily_notes[self.ds] = {
@@ -2538,7 +2540,10 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.parent.save_data()
         self.parent.render_table()
-        play_notification_sound()
+        self.destroy()
+
+    def close_modal(self):
+        play_button_sound()
         self.destroy()
 
     def delete_note(self):
