@@ -2089,7 +2089,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkButton(c1_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                      text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
+                      text_color=theme["text"], font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
                       command=lambda: self.preview_task_sound(self.task_sound_var.get())).pack(side="left")
 
         self.task_desc_lbl = ctk.CTkLabel(c1, text=SOUND_OPTIONS.get(curr_task, {}).get("desc", ""),
@@ -2128,7 +2128,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkButton(c2_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                      text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
+                      text_color=theme["text"], font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
                       command=lambda: self.preview_btn_sound(self.btn_sound_var.get())).pack(side="left")
 
         self.btn_desc_lbl = ctk.CTkLabel(c2, text=SOUND_OPTIONS.get(curr_btn, {}).get("desc", ""),
@@ -2167,7 +2167,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkButton(c3_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                      text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
+                      text_color=theme["text"], font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
                       command=lambda: self.preview_btn_sound(self.notif_sound_var.get())).pack(side="left")
 
         self.notif_desc_lbl = ctk.CTkLabel(c3, text=SOUND_OPTIONS.get(curr_notif, {}).get("desc", ""),
@@ -2206,7 +2206,7 @@ class SettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkButton(c4_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                      text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
+                      text_color=theme["text"], font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
                       command=lambda: self.preview_btn_sound(self.rating_sound_var.get())).pack(side="left")
 
         self.rating_desc_lbl = ctk.CTkLabel(c4, text=SOUND_OPTIONS.get(curr_rating, {}).get("desc", ""),
