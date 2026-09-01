@@ -2572,12 +2572,13 @@ class HabitTrackerApp(ctk.CTk):
             self.stat_c2_val.configure(text_color=theme.get("done", "#789262"))
             self.stat_c3_val.configure(text_color=theme.get("efektiflik_color", "#957DC7"))
 
-        # Bottom Frame
+        # Bottom Frame & Nav Capsule
         self.bottom_frame.configure(fg_color=theme["card"])
-        if hasattr(self, "table_prev_btn"):
-            self.table_prev_btn.configure(fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"], text_color=theme["text"])
-            self.table_next_btn.configure(fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"], text_color=theme["text"])
-            self.table_today_btn.configure(fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"], text_color=theme.get("accent", "#FB7185"))
+        if hasattr(self, "table_nav_center"):
+            self.table_nav_center.configure(fg_color=theme["card_alt"])
+            self.table_prev_btn.configure(text_color=theme["text"], hover_color=theme["btn_primary_hover"])
+            self.table_next_btn.configure(text_color=theme["text"], hover_color=theme["btn_primary_hover"])
+            self.table_month_lbl.configure(text_color=theme["text"])
 
         # Render Table & Charts (ultra-fast)
         self.render_table()
@@ -2806,33 +2807,34 @@ class HabitTrackerApp(ctk.CTk):
         )
         self.table_canvas.pack(side="top", fill="both", expand=True, padx=12, pady=(10, 2))
 
-        # Alt Ay Gezinme Çubuğu (Önceki Ay / Bu Ay / Sonraki Ay)
+        # Alt Ay Gezinme Kapsülü (Ultra-Minimalist Lofi Kapsül)
         self.table_nav_frame = ctk.CTkFrame(self.bottom_frame, fg_color="transparent")
-        self.table_nav_frame.pack(side="bottom", fill="x", pady=(2, 8))
+        self.table_nav_frame.pack(side="bottom", fill="x", pady=(0, 6))
 
-        self.table_nav_center = ctk.CTkFrame(self.table_nav_frame, fg_color="transparent")
+        self.table_nav_center = ctk.CTkFrame(self.table_nav_frame, fg_color=theme["card_alt"], corner_radius=12)
         self.table_nav_center.pack(anchor="center")
 
         self.table_prev_btn = ctk.CTkButton(
-            self.table_nav_center, text="◄ Önceki Ay", width=95, height=26,
-            fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=13, font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
+            self.table_nav_center, text="◄", width=24, height=20,
+            fg_color="transparent", hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"], corner_radius=10, font=ctk.CTkFont(family="Arial", size=9, weight="bold"),
             command=lambda: self.navigate_table_month(-1))
-        self.table_prev_btn.pack(side="left", padx=5)
+        self.table_prev_btn.pack(side="left", padx=(3, 1), pady=2)
 
-        self.table_today_btn = ctk.CTkButton(
-            self.table_nav_center, text="Bu Ay", width=65, height=26,
-            fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"],
-            text_color=theme.get("accent", "#FB7185"), corner_radius=13, font=ctk.CTkFont(size=10, weight="bold"),
-            command=self.reset_to_current_month)
-        self.table_today_btn.pack(side="left", padx=5)
+        self.table_month_lbl = ctk.CTkLabel(
+            self.table_nav_center, text=f"{TURKISH_MONTHS[self.table_month]} {self.table_year}",
+            font=ctk.CTkFont(size=10, weight="bold"), text_color=theme["text"],
+            cursor="hand2"
+        )
+        self.table_month_lbl.pack(side="left", padx=8, pady=2)
+        self.table_month_lbl.bind("<Button-1>", lambda e: self.reset_to_current_month())
 
         self.table_next_btn = ctk.CTkButton(
-            self.table_nav_center, text="Sonraki Ay ►", width=95, height=26,
-            fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=13, font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
+            self.table_nav_center, text="►", width=24, height=20,
+            fg_color="transparent", hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"], corner_radius=10, font=ctk.CTkFont(family="Arial", size=9, weight="bold"),
             command=lambda: self.navigate_table_month(1))
-        self.table_next_btn.pack(side="left", padx=5)
+        self.table_next_btn.pack(side="left", padx=(1, 3), pady=2)
 
         self.table_canvas.bind("<Configure>", lambda e: self.render_table())
         self.table_canvas.bind("<Button-1>", self.on_table_click)
@@ -3473,6 +3475,8 @@ class HabitTrackerApp(ctk.CTk):
         self.table_month = m
         self.table_year = y
         self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
+        if hasattr(self, "table_month_lbl"):
+            self.table_month_lbl.configure(text=f"{TURKISH_MONTHS[m]} {y}")
         self.render_table()
         self.update_charts()
 
@@ -3491,6 +3495,8 @@ class HabitTrackerApp(ctk.CTk):
         self.chart_month = m
         self.chart_year = y
         self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
+        if hasattr(self, "table_month_lbl"):
+            self.table_month_lbl.configure(text=f"{TURKISH_MONTHS[m]} {y}")
         self.render_table()
         self.update_charts()
 
@@ -3501,6 +3507,8 @@ class HabitTrackerApp(ctk.CTk):
         self.chart_month = self.today.month
         self.chart_year = self.today.year
         self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[self.today.month]} {self.today.year})")
+        if hasattr(self, "table_month_lbl"):
+            self.table_month_lbl.configure(text=f"{TURKISH_MONTHS[self.today.month]} {self.today.year}")
         self.render_table()
         self.update_charts()
 
