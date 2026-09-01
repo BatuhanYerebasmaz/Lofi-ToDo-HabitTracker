@@ -1749,6 +1749,7 @@ class StickyWidget(ctk.CTkToplevel):
 
     def restore_main_window(self):
         play_button_sound()
+        self.withdraw()
         self.parent.restore_from_tray()
 
 
@@ -4023,20 +4024,26 @@ class HabitTrackerApp(ctk.CTk):
             print(f"Sistem tepsisi başlatma hatası: {e}")
 
     def toggle_sticky_mode(self):
-        """Kayan Mini Widget modunu açar veya kapatır."""
+        """Kayan Mini Widget ile Ana Pencere arasında geçiş yapar."""
         play_button_sound()
         if not hasattr(self, "sticky_widget") or self.sticky_widget is None or not self.sticky_widget.winfo_exists():
             self.sticky_widget = StickyWidget(self)
 
         if self.sticky_widget.winfo_viewable():
-            self.sticky_widget.hide_widget()
+            # Mini moddan ana pencereye geç
+            self.sticky_widget.withdraw()
+            self.restore_from_tray()
         else:
+            # Ana pencereden mini moda geç
+            self.withdraw()
             self.sticky_widget.show_widget()
 
     def open_sticky_widget(self):
+        """Ana pencereyi gizleyip sadece Kayan Mini Widget'ı açar."""
         play_button_sound()
         if not hasattr(self, "sticky_widget") or self.sticky_widget is None or not self.sticky_widget.winfo_exists():
             self.sticky_widget = StickyWidget(self)
+        self.withdraw()
         self.sticky_widget.show_widget()
 
     def hide_sticky_widget(self):
@@ -4049,10 +4056,15 @@ class HabitTrackerApp(ctk.CTk):
         self.after(0, self._on_hotkey_pressed)
 
     def _on_hotkey_pressed(self):
+        # 1. Mini widget açıksa -> kapat ve ana pencereyi aç
         if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists() and self.sticky_widget.winfo_viewable():
-            self.sticky_widget.hide_widget()
-        elif self.state() == "withdrawn" or self.state() == "iconic":
+            self.sticky_widget.withdraw()
             self.restore_from_tray()
+        # 2. Ana pencere açıksa -> ana pencereyi gizle ve mini widget'ı aç
+        elif self.winfo_viewable() and self.state() != "withdrawn" and self.state() != "iconic":
+            self.withdraw()
+            self.open_sticky_widget()
+        # 3. İkisi de kapalıysa (tepsideyse) -> Mini widget'ı aç
         else:
             self.open_sticky_widget()
 
@@ -4077,6 +4089,9 @@ class HabitTrackerApp(ctk.CTk):
                 pass
 
     def _do_restore(self):
+        # Ana pencere açılırken mini widget'ı kapat
+        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
+            self.sticky_widget.withdraw()
         self.deiconify()
         self.state('normal')
         self.lift()
