@@ -2157,9 +2157,11 @@ class HabitTrackerApp(ctk.CTk):
         self.selected_monday = self.current_monday
         self.week_dates = [self.current_monday + datetime.timedelta(days=i) for i in range(7)]
 
-        # Grafik ay navigasyonu
+        # Grafik ve Tablo ay navigasyonu
         self.chart_year = self.today.year
         self.chart_month = self.today.month
+        self.table_year = self.today.year
+        self.table_month = self.today.month
 
         # Veriler (İlk kurulum varsayılanları)
         self.tasks = ["Sabah Yürüyüşü / Spor", "Kitap Oku (20 Sayfa)", "Kodlama & Proje Çalış", "Günde 2L Su İç"]
@@ -2572,6 +2574,10 @@ class HabitTrackerApp(ctk.CTk):
 
         # Bottom Frame
         self.bottom_frame.configure(fg_color=theme["card"])
+        if hasattr(self, "table_prev_btn"):
+            self.table_prev_btn.configure(fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"], text_color=theme["text"])
+            self.table_next_btn.configure(fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"], text_color=theme["text"])
+            self.table_today_btn.configure(fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"], text_color=theme.get("accent", "#FB7185"))
 
         # Render Table & Charts (ultra-fast)
         self.render_table()
@@ -2798,7 +2804,35 @@ class HabitTrackerApp(ctk.CTk):
             highlightthickness=0,
             bd=0
         )
-        self.table_canvas.pack(fill="both", expand=True, padx=12, pady=10)
+        self.table_canvas.pack(side="top", fill="both", expand=True, padx=12, pady=(10, 2))
+
+        # Alt Ay Gezinme Çubuğu (Önceki Ay / Bu Ay / Sonraki Ay)
+        self.table_nav_frame = ctk.CTkFrame(self.bottom_frame, fg_color="transparent")
+        self.table_nav_frame.pack(side="bottom", fill="x", pady=(2, 8))
+
+        self.table_nav_center = ctk.CTkFrame(self.table_nav_frame, fg_color="transparent")
+        self.table_nav_center.pack(anchor="center")
+
+        self.table_prev_btn = ctk.CTkButton(
+            self.table_nav_center, text="◄ Önceki Ay", width=95, height=26,
+            fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"], corner_radius=13, font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
+            command=lambda: self.navigate_table_month(-1))
+        self.table_prev_btn.pack(side="left", padx=5)
+
+        self.table_today_btn = ctk.CTkButton(
+            self.table_nav_center, text="Bu Ay", width=65, height=26,
+            fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"],
+            text_color=theme.get("accent", "#FB7185"), corner_radius=13, font=ctk.CTkFont(size=10, weight="bold"),
+            command=self.reset_to_current_month)
+        self.table_today_btn.pack(side="left", padx=5)
+
+        self.table_next_btn = ctk.CTkButton(
+            self.table_nav_center, text="Sonraki Ay ►", width=95, height=26,
+            fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"], corner_radius=13, font=ctk.CTkFont(family="Arial", size=10, weight="bold"),
+            command=lambda: self.navigate_table_month(1))
+        self.table_next_btn.pack(side="left", padx=5)
 
         self.table_canvas.bind("<Configure>", lambda e: self.render_table())
         self.table_canvas.bind("<Button-1>", self.on_table_click)
@@ -2876,8 +2910,8 @@ class HabitTrackerApp(ctk.CTk):
         if h < 100:
             h = 240
 
-        year = self.today.year
-        month = self.today.month
+        year = getattr(self, "table_year", self.today.year)
+        month = getattr(self, "table_month", self.today.month)
         num_days = calendar.monthrange(year, month)[1]
 
         task_col_w = 160
@@ -3436,7 +3470,38 @@ class HabitTrackerApp(ctk.CTk):
             y -= 1
         self.chart_month = m
         self.chart_year = y
+        self.table_month = m
+        self.table_year = y
         self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
+        self.render_table()
+        self.update_charts()
+
+    def navigate_table_month(self, delta):
+        play_button_sound()
+        m = getattr(self, "table_month", self.today.month) + delta
+        y = getattr(self, "table_year", self.today.year)
+        if m > 12:
+            m = 1
+            y += 1
+        elif m < 1:
+            m = 12
+            y -= 1
+        self.table_month = m
+        self.table_year = y
+        self.chart_month = m
+        self.chart_year = y
+        self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[m]} {y})")
+        self.render_table()
+        self.update_charts()
+
+    def reset_to_current_month(self):
+        play_button_sound()
+        self.table_month = self.today.month
+        self.table_year = self.today.year
+        self.chart_month = self.today.month
+        self.chart_year = self.today.year
+        self.chart2_title_lbl.configure(text=f"Aylık Odak ({TURKISH_MONTHS[self.today.month]} {self.today.year})")
+        self.render_table()
         self.update_charts()
 
     # ---------- SİSTEM TEPSİSİ & ARKA PLAN MODU ----------
