@@ -2895,9 +2895,8 @@ class HabitTrackerApp(ctk.CTk):
                         day_done += 1
                 else:
                     cnt = int(val) if isinstance(val, (int, float)) else (target if val is True else 0)
-                    total_xp += (cnt * 2)
                     if cnt >= target:
-                        total_xp += 10
+                        total_xp += 15
                         day_done += 1
             if day_total > 0 and day_done == day_total:
                 total_xp += 50
