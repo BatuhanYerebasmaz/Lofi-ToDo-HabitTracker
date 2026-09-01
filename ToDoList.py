@@ -2180,7 +2180,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 action_box, text="📷 + Fotoğraf Ekle", width=120, height=28, corner_radius=8,
                 fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
                 text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
-                command=self.add_image
+                command=lambda: (play_button_sound(), self.add_image())
             ).pack(side="right", padx=(0, 8))
 
         # Pencereyi Başlıktan/Sayfadan Sürükleme Desteği (Drag & Move)
@@ -2384,7 +2384,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                     )
 
                     # Silme Tıklaması
-                    self.photo_canvas.tag_bind(del_tag, "<Button-1>", lambda e, p=img_path: self.remove_image(p))
+                    self.photo_canvas.tag_bind(del_tag, "<Button-1>", lambda e, p=img_path: (play_button_sound(), self.remove_image(p)))
 
                 # Fotoğrafa Büyütme Tıklaması
                 self.photo_canvas.tag_bind(img_tag, "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
