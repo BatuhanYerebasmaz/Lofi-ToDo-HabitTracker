@@ -2352,6 +2352,25 @@ class HabitTrackerApp(ctk.CTk):
         self.save_data()
         return new_val, is_completed, is_just_completed
 
+    def decrement_task(self, date_obj, task_name):
+        """Sağ tıklandığında: sayaçlı görevde sayıyı 1 azaltır (-1), normal görevde ise işareti kaldırır (False)."""
+        target = self.get_task_target(task_name)
+        ds = date_obj.strftime("%Y-%m-%d")
+        self.records.setdefault(ds, {})
+        curr_val = self.records[ds].get(task_name, 0 if target > 1 else False)
+
+        if target <= 1:
+            new_val = False
+            is_completed = False
+        else:
+            curr_count = curr_val if isinstance(curr_val, (int, float)) else (target if curr_val is True else 0)
+            new_val = max(0, curr_count - 1)
+            is_completed = (new_val >= target)
+
+        self.records[ds][task_name] = new_val
+        self.save_data()
+        return new_val, is_completed
+
     def set_task_state(self, date_obj, task_name, value):
         ds = date_obj.strftime("%Y-%m-%d")
         self.records.setdefault(ds, {})[task_name] = value
@@ -2743,6 +2762,7 @@ class HabitTrackerApp(ctk.CTk):
 
         self.table_canvas.bind("<Configure>", lambda e: self.render_table())
         self.table_canvas.bind("<Button-1>", self.on_table_click)
+        self.table_canvas.bind("<Button-3>", self.on_table_right_click)
         self.table_canvas.bind("<Motion>", self.on_table_motion)
 
     def open_settings(self):
@@ -3133,6 +3153,65 @@ class HabitTrackerApp(ctk.CTk):
             ds = d_obj.strftime("%Y-%m-%d")
             curr_val = str(self.efektiflik_records.get(ds, "-"))
             next_idx = (values.index(curr_val) + 1) % len(values) if curr_val in values else 0
+            self.set_score(d_obj, "efektiflik", values[next_idx])
+            self.render_table()
+            self.update_charts()
+            return
+
+    # ---------- TABLO SAĞ TIKLAMA (SAYACI AZALT / İŞARETİ KALDIR) ----------
+    def on_table_right_click(self, event):
+        if not hasattr(self, "_table_geo"):
+            return
+
+        geo = self._table_geo
+        x, y = event.x, event.y
+
+        if x < geo["task_col_w"]:
+            return
+
+        day_idx = int((x - geo["task_col_w"]) / geo["col_w"])
+        day = day_idx + 1
+
+        if not (1 <= day <= geo["num_days"]):
+            return
+
+        d_obj = datetime.date(geo["year"], geo["month"], day)
+
+        if d_obj != self.today:
+            return
+
+        # 1. Görev Satırlarına Sağ Tıklama (Sayaç -1 veya İşareti Kaldır)
+        if geo["header_h"] <= y < geo["header_h"] + len(self.tasks) * geo["row_h"]:
+            task_idx = int((y - geo["header_h"]) / geo["row_h"])
+            if 0 <= task_idx < len(self.tasks):
+                task_name = self.tasks[task_idx]
+                new_val, is_completed = self.decrement_task(d_obj, task_name)
+                play_task_sound(is_checking=False)
+
+                self.render_table()
+                self.update_charts()
+                self.update_progress()
+                return
+
+        # 2. Moral Satırına Sağ Tıklama (Geri Say)
+        if geo["moral_y"] <= y < geo["moral_y"] + geo["row_h"]:
+            play_rating_sound()
+            values = ["-", "1", "2", "3", "4", "5"]
+            ds = d_obj.strftime("%Y-%m-%d")
+            curr_val = str(self.moral_records.get(ds, "-"))
+            next_idx = (values.index(curr_val) - 1) % len(values) if curr_val in values else 0
+            self.set_score(d_obj, "moral", values[next_idx])
+            self.render_table()
+            self.update_charts()
+            return
+
+        # 3. Efektiflik Satırına Sağ Tıklama (Geri Say)
+        if geo["efektiflik_y"] <= y < geo["efektiflik_y"] + geo["row_h"]:
+            play_rating_sound()
+            values = ["-", "1", "2", "3", "4", "5"]
+            ds = d_obj.strftime("%Y-%m-%d")
+            curr_val = str(self.efektiflik_records.get(ds, "-"))
+            next_idx = (values.index(curr_val) - 1) % len(values) if curr_val in values else 0
             self.set_score(d_obj, "efektiflik", values[next_idx])
             self.render_table()
             self.update_charts()
