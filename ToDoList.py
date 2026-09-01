@@ -2087,7 +2087,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.task_menu.pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(c1_row, text="▶ Dinle", width=75, height=32, corner_radius=10,
+        ctk.CTkButton(c1_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                       text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
                       command=lambda: self.preview_task_sound(self.task_sound_var.get())).pack(side="left")
@@ -2126,7 +2126,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.btn_menu.pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(c2_row, text="▶ Dinle", width=75, height=32, corner_radius=10,
+        ctk.CTkButton(c2_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                       text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
                       command=lambda: self.preview_btn_sound(self.btn_sound_var.get())).pack(side="left")
@@ -2165,7 +2165,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.notif_menu.pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(c3_row, text="▶ Dinle", width=75, height=32, corner_radius=10,
+        ctk.CTkButton(c3_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                       text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
                       command=lambda: self.preview_btn_sound(self.notif_sound_var.get())).pack(side="left")
@@ -2204,7 +2204,7 @@ class SettingsWindow(ctk.CTkToplevel):
         )
         self.rating_menu.pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(c4_row, text="▶ Dinle", width=75, height=32, corner_radius=10,
+        ctk.CTkButton(c4_row, text="► Dinle", width=75, height=32, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                       text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
                       command=lambda: self.preview_btn_sound(self.rating_sound_var.get())).pack(side="left")
