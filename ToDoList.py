@@ -1521,7 +1521,9 @@ class GlobalHotkeyManager:
 #  KAYAN MİNİ WİDGET (STICKY MODE - ALWAYS ON TOP)
 # ============================================================
 class StickyWidget(ctk.CTkToplevel):
-    """Her zaman üstte duran, sürüklenebilir ve kompakt lofi mini görev widget'ı."""
+    """Her zaman üstte duran, pürüzsüz yuvarlak köşeli, sürüklenebilir kompakt lofi mini görev widget'ı."""
+    TRANS_COLOR = "#000001"
+
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
@@ -1529,13 +1531,17 @@ class StickyWidget(ctk.CTkToplevel):
         self.overrideredirect(True)
         self.attributes("-topmost", True)
 
-        screen_w = self.winfo_screenwidth()
-        x = self.parent.settings.get("sticky_x", screen_w - 270)
-        y = self.parent.settings.get("sticky_y", 80)
-        self.geometry(f"250x320+{max(0, x)}+{max(0, y)}")
+        # Windows'ta köşeli beyaz çıkıntıları yok edip gerçek yuvarlak pencere yapmak için saydam renk
+        try:
+            self.wm_attributes("-transparentcolor", self.TRANS_COLOR)
+        except Exception:
+            pass
+        self.configure(fg_color=self.TRANS_COLOR)
 
-        theme = self.parent.get_theme()
-        self.configure(fg_color=theme["bg"])
+        screen_w = self.winfo_screenwidth()
+        x = self.parent.settings.get("sticky_x", screen_w - 280)
+        y = self.parent.settings.get("sticky_y", 80)
+        self.geometry(f"260x340+{max(0, x)}+{max(0, y)}")
 
         self._drag_start_x = 0
         self._drag_start_y = 0
@@ -1546,54 +1552,61 @@ class StickyWidget(ctk.CTkToplevel):
     def setup_ui(self):
         theme = self.parent.get_theme()
 
-        # Dış Kart
+        # Dış Yuvarlak Kart (Köşeleri saydam arka planda mükemmel yuvarlak görünür)
         self.card = ctk.CTkFrame(
-            self, fg_color=theme["card"], corner_radius=14,
+            self, fg_color=theme["card"], corner_radius=16,
             border_width=1.5, border_color=theme.get("accent", "#7C3AED")
         )
-        self.card.pack(fill="both", expand=True, padx=2, pady=2)
+        self.card.pack(fill="both", expand=True, padx=4, pady=4)
 
         # Başlık Çubuğu (Sürüklenebilir)
-        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=32, corner_radius=10)
-        self.header.pack(fill="x", padx=5, pady=(5, 3))
+        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=34, corner_radius=12)
+        self.header.pack(fill="x", padx=6, pady=(6, 4))
         self.header.pack_propagate(False)
 
-        # Başlık & Sürükleme İkonu
+        # Başlık İkon & Metin
         self.title_lbl = ctk.CTkLabel(
-            self.header, text="📌 Görevler", font=ctk.CTkFont(size=11, weight="bold"),
+            self.header, text="📌 Bugün", font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme["text"]
         )
-        self.title_lbl.pack(side="left", padx=8)
+        self.title_lbl.pack(side="left", padx=(10, 4))
 
-        # İlerleme Rozeti
+        # İlerleme Rozeti (Pill)
         done, total = self.parent.get_today_progress()
+        self.progress_frame = ctk.CTkFrame(self.header, fg_color=theme["card"], corner_radius=6)
+        self.progress_frame.pack(side="left", padx=4)
+
         self.progress_lbl = ctk.CTkLabel(
-            self.header, text=f"{done}/{total}", font=ctk.CTkFont(size=10, weight="bold"),
+            self.progress_frame, text=f"{done}/{total}", font=ctk.CTkFont(size=10, weight="bold"),
             text_color=theme.get("accent", "#FB7185")
         )
-        self.progress_lbl.pack(side="left", padx=2)
+        self.progress_lbl.pack(padx=6, pady=1)
 
         # Kapat / Gizle Butonu
         self.close_btn = ctk.CTkButton(
-            self.header, text="✕", width=20, height=20,
+            self.header, text="✕", width=22, height=22,
             fg_color="transparent", hover_color=theme["btn_danger"],
-            text_color=theme["text"], corner_radius=10, font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10, weight="bold"),
             command=self.hide_widget
         )
-        self.close_btn.pack(side="right", padx=4)
+        self.close_btn.pack(side="right", padx=(2, 6))
 
         # Ana Pencereyi Aç / Büyüt Butonu
         self.expand_btn = ctk.CTkButton(
-            self.header, text="📂", width=20, height=20,
+            self.header, text="📂", width=22, height=22,
             fg_color="transparent", hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=10, font=ctk.CTkFont(size=10),
+            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10),
             command=self.restore_main_window
         )
         self.expand_btn.pack(side="right", padx=2)
 
         # Görevler Kaydırılabilir Listesi
-        self.scroll_frame = ctk.CTkScrollableFrame(self.card, fg_color="transparent")
-        self.scroll_frame.pack(fill="both", expand=True, padx=3, pady=(2, 4))
+        self.scroll_frame = ctk.CTkScrollableFrame(
+            self.card, fg_color="transparent",
+            scrollbar_button_color=theme["btn_primary"],
+            scrollbar_button_hover_color=theme["btn_primary_hover"]
+        )
+        self.scroll_frame.pack(fill="both", expand=True, padx=4, pady=(2, 6))
 
         self.render_tasks()
 
@@ -1611,16 +1624,16 @@ class StickyWidget(ctk.CTkToplevel):
 
         if not self.parent.tasks:
             ctk.CTkLabel(
-                self.scroll_frame, text="Henüz görev yok",
+                self.scroll_frame, text="Henüz görev eklenmemiş",
                 font=ctk.CTkFont(size=11), text_color=theme["text_secondary"]
-            ).pack(pady=20)
+            ).pack(pady=25)
             return
 
         for task in self.parent.tasks:
             target = self.parent.get_task_target(task)
             is_done = self.parent.get_task_state(today, task)
 
-            row = ctk.CTkFrame(self.scroll_frame, fg_color=theme["card_alt"], corner_radius=8, height=28)
+            row = ctk.CTkFrame(self.scroll_frame, fg_color=theme["card_alt"], corner_radius=8, height=30)
             row.pack(fill="x", pady=2)
             row.pack_propagate(False)
 
@@ -1636,19 +1649,20 @@ class StickyWidget(ctk.CTkToplevel):
                     corner_radius=6, font=ctk.CTkFont(size=9, weight="bold"),
                     command=lambda t=task: self.on_task_click(t)
                 )
-                cnt_btn.pack(side="left", padx=4)
+                cnt_btn.pack(side="left", padx=(6, 4))
                 cnt_btn.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
             else:
                 chk_text = "✓" if is_done else " "
                 chk_color = theme.get("done", "#789262") if is_done else theme["card"]
+                border_col = theme.get("done", "#789262") if is_done else theme.get("border", theme.get("entry_border", "#D1D5DB"))
                 chk_btn = ctk.CTkButton(
                     row, text=chk_text, width=22, height=22,
                     fg_color=chk_color, hover_color=theme["btn_primary_hover"],
-                    border_width=1, border_color=theme.get("done", "#789262") if is_done else theme.get("border", theme.get("entry_border", "#D1D5DB")),
+                    border_width=1.5, border_color=border_col,
                     text_color="#FFFFFF", corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"),
                     command=lambda t=task: self.on_task_click(t)
                 )
-                chk_btn.pack(side="left", padx=4)
+                chk_btn.pack(side="left", padx=(6, 4))
                 chk_btn.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
 
             # Görev Adı
@@ -1657,7 +1671,7 @@ class StickyWidget(ctk.CTkToplevel):
                 font=ctk.CTkFont(size=10, overstrike=is_done),
                 text_color=theme["text_secondary"] if is_done else theme["text"]
             )
-            lbl.pack(side="left", fill="x", expand=True, padx=4)
+            lbl.pack(side="left", fill="x", expand=True, padx=(2, 6))
             lbl.bind("<Button-1>", lambda e, t=task: self.on_task_click(t))
             lbl.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
 
@@ -1691,17 +1705,26 @@ class StickyWidget(ctk.CTkToplevel):
 
     def apply_theme(self):
         theme = self.parent.get_theme()
-        self.configure(fg_color=theme["bg"])
+        try:
+            self.wm_attributes("-transparentcolor", self.TRANS_COLOR)
+        except Exception:
+            pass
+        self.configure(fg_color=self.TRANS_COLOR)
         self.card.configure(fg_color=theme["card"], border_color=theme.get("accent", "#7C3AED"))
         self.header.configure(fg_color=theme["card_alt"])
+        self.progress_frame.configure(fg_color=theme["card"])
         self.title_lbl.configure(text_color=theme["text"])
         self.progress_lbl.configure(text_color=theme.get("accent", "#FB7185"))
         self.close_btn.configure(text_color=theme["text"])
         self.expand_btn.configure(text_color=theme["text"])
+        self.scroll_frame.configure(
+            scrollbar_button_color=theme["btn_primary"],
+            scrollbar_button_hover_color=theme["btn_primary_hover"]
+        )
         self.render_tasks()
 
     def bind_events(self):
-        for w in (self.header, self.title_lbl, self.progress_lbl):
+        for w in (self.header, self.title_lbl, self.progress_lbl, self.progress_frame):
             w.bind("<Button-1>", self._start_drag)
             w.bind("<B1-Motion>", self._on_drag)
             w.bind("<ButtonRelease-1>", self._stop_drag)
