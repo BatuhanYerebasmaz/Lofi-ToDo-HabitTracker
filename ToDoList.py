@@ -2563,28 +2563,35 @@ class HabitTrackerApp(ctk.CTk):
     def setup_ui(self):
         theme = self.get_theme()
 
-        # ─── BAŞLIK ───
+        # ─── BAŞLIK (SOL BAŞLIK, ORTA SEVİYE & ROZETLER, SAĞ KONTROLLER) ───
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.header_frame.pack(side="top", fill="x", padx=16, pady=(10, 4))
+        self.header_frame.grid_columnconfigure(0, weight=1)
+        self.header_frame.grid_columnconfigure(1, weight=2)
+        self.header_frame.grid_columnconfigure(2, weight=1)
+
+        # SOL: Başlık
+        self.left_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.left_header.grid(row=0, column=0, sticky="w")
 
         self.title_label = ctk.CTkLabel(
-            self.header_frame, text="📋 Görev & Alışkanlık Takibi",
+            self.left_header, text="📋 Görev & Alışkanlık Takibi",
             font=ctk.CTkFont(size=19, weight="bold"), text_color=theme["text"])
         self.title_label.pack(side="left")
 
-        # XP & Level Gamification Frame (Dengeli Seviye Barı)
-        self.level_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.level_frame.pack(side="left", padx=(16, 0))
+        # ORTA: Seviye Barı & Rozetler (Tam Ortalanmış)
+        self.center_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.center_header.grid(row=0, column=1)
 
         self.level_badge_lbl = ctk.CTkLabel(
-            self.level_frame, text="⭐ Lvl 1: Çaylak",
+            self.center_header, text="⭐ Lvl 1: Çaylak",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.get("accent", "#FB7185")
         )
         self.level_badge_lbl.pack(side="left", padx=(0, 8))
 
         self.xp_bar = ctk.CTkProgressBar(
-            self.level_frame, width=190, height=12,
+            self.center_header, width=200, height=12,
             corner_radius=6,
             fg_color=theme["progress_bg"],
             progress_color=theme.get("moral_color", "#D98A48")
@@ -2593,19 +2600,15 @@ class HabitTrackerApp(ctk.CTk):
         self.xp_bar.set(0)
 
         self.xp_label = ctk.CTkLabel(
-            self.level_frame, text="0/120 XP",
+            self.center_header, text="0/120 XP",
             font=ctk.CTkFont(size=10, weight="bold"),
             text_color=theme["text_secondary"]
         )
-        self.xp_label.pack(side="left", padx=(0, 8))
-
-        # Rozetler ve İstatistikler Grubu
-        self.stats_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.stats_frame.pack(side="left", padx=(4, 0))
+        self.xp_label.pack(side="left", padx=(0, 10))
 
         # 1. Seri (Streak)
-        self.streak_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
-        self.streak_badge.pack(side="left", padx=(0, 5))
+        self.streak_badge = ctk.CTkFrame(self.center_header, fg_color=theme["card_alt"], corner_radius=8)
+        self.streak_badge.pack(side="left", padx=(0, 6))
         self.streak_lbl = ctk.CTkLabel(
             self.streak_badge, text="🔥 0 Gün",
             font=ctk.CTkFont(size=10, weight="bold"),
@@ -2614,7 +2617,7 @@ class HabitTrackerApp(ctk.CTk):
         self.streak_lbl.pack(padx=7, pady=2)
 
         # 2. Kalkan (Shield)
-        self.shield_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
+        self.shield_badge = ctk.CTkFrame(self.center_header, fg_color=theme["card_alt"], corner_radius=8)
         self.shield_badge.pack(side="left")
         self.shield_lbl = ctk.CTkLabel(
             self.shield_badge, text="🛡️ 1 Kalkan",
@@ -2623,9 +2626,9 @@ class HabitTrackerApp(ctk.CTk):
         )
         self.shield_lbl.pack(padx=7, pady=2)
 
-        # Sağ üst
+        # SAĞ: Saat, Switch, Ayarlar
         self.right_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.right_header.pack(side="right")
+        self.right_header.grid(row=0, column=2, sticky="e")
 
         self.clock_label = ctk.CTkLabel(self.right_header, text="",
                                         font=ctk.CTkFont(size=11, weight="bold"),
