@@ -2402,7 +2402,6 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.photo_canvas.config(scrollregion=(0, 0, max(560, x_cursor + 20), 125))
 
     def add_image(self):
-        play_button_sound()
         files = filedialog.askopenfilenames(
             parent=self,
             title="Fotoğraf Seç (Deftere İğnele)",
@@ -2487,7 +2486,6 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.parent.save_data()
         self.parent.render_table()
 
-        play_button_sound()
         self.render_polaroid_gallery()
         self.lift()
         self.focus_force()
@@ -2515,7 +2513,6 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.parent.save_data()
             self.parent.render_table()
 
-            play_button_sound()
             self.render_polaroid_gallery()
             self.lift()
             self.focus_force()
