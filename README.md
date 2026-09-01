@@ -45,14 +45,24 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ---
 
 ### 🤖 5. Yapay Zeka Darlama & Hatırlatma Motoru
-* **🧠 Yerel & Bulut LLM Desteği:** Dahili Baskıcı AI Motoru (hızlı/çevrimdışı), Ollama veya LM Studio yerel modelleri.
+* **🧠 Yerel & Bulut LLM Desteği:**
+  * **Google Gemini API (Ücretsiz):** Google AI Studio API anahtarıyla buluttan ışık hızında çalışan `Gemini 1.5 Flash` ve `Gemini 2.0 Flash` modelleri.
+  * **Dahili Yerel Motor:** Harici hiçbir kurulum gerektirmeyen hazır çevrimdışı motor.
+  * **Ollama & LM Studio:** Kendi bilgisayarınızdaki yerel açık kaynak modeller.
 * **🎭 Farklı Kişilik Modları:** *Sert & Direkt*, *İğneleyici / Alaycı*, *Pasif Agresif*, *Motive Edici / Koçluk* ve *Özel Prompt*.
 * **⏰ Akıllı Zamanlama:** Görevler için rastgele aralıklarla bağımsız bildirimler ve 30 saniyelik otomatik erteleme mekanizması.
 * **⚠️ Otantik Windows Hata Penceresi:** Bildirimler 3 kez ertelendiğinde gerçek sistem hata diyalogu hissi veren dinamik arayüz.
 
 ---
 
-### 🎨 6. Temalar & Lofi Ses Paketi
+### 📌 6. Kayan Mini Widget (Sticky Mode) & Global Kısayol
+* **📌 Kayan Mini Görev Kartı (Always-on-Top):** Ekranın köşesinde her zaman üstte duran, sürüklenebilir ve minimalist kompakt görev takip penceresi.
+* **⌨️ Global Klavye Kısayolu (`Ctrl+Shift+T`):** Hangi uygulamada veya oyunda olursanız olun klavyeden `Ctrl+Shift+T` basarak uygulamayı veya mini widget'ı anında açıp gizleme (%0 CPU).
+* **🕹️ Kolay Kontrol:** Ana pencere başlığındaki `📌 Mini` butonu, Ayarlar > *📌 Kayan Widget* sekmesi veya Sistem Tepsisi menüsü üzerinden tek tıkla açma/kapatma.
+
+---
+
+### 🎨 7. Temalar & Lofi Ses Paketi
 * **🎨 20 Estetik Tema:** 10 Pastel Aydınlık (Latte & Şeftali, Matcha Yeşili vb.) ve 10 Modern Karanlık (Karanlık Karbon, Gece Mavisi vb.) tema.
 * **🎵 20 Farklı Mekanik & Lofi Ses Efekti:** 
   * Görev tamamlama, buton tıklama, bildirimler ve moral/efektiflik puanlama için **4 bağımsız ses kanalı**.

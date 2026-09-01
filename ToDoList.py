@@ -62,6 +62,7 @@ import threading
 import ctypes
 import socket
 import winsound
+import webbrowser
 import time
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -365,9 +366,13 @@ DEFAULT_AI_MODEL = "Dahili Baskıcı AI Motoru (Yerel/Hızlı)"
 
 
 def scan_local_ai_models():
-    """Ollama ve LM Studio yerel modellerini diskten ve canlı portlardan anında (0ms) tarar."""
-    models = [DEFAULT_AI_MODEL]
-    found_set = set()
+    """Google Gemini, Ollama ve LM Studio modellerini tarar ve listeler."""
+    models = [
+        DEFAULT_AI_MODEL,
+        "Google Gemini (1.5 Flash - Hızlı & Ücretsiz)",
+        "Google Gemini (2.0 Flash - Yeni)",
+    ]
+    found_set = set(models)
 
     # 1. Ollama Disk Manifest Taraması (Ollama servisi kapalı olsa dahi diskteki modelleri 1ms'de bulur)
     ollama_dir = os.path.expanduser("~/.ollama/models/manifests/registry.ollama.ai")
@@ -689,6 +694,44 @@ def query_lm_studio(model_name, prompt):
     return None
 
 
+def query_gemini(api_key, model_name, prompt):
+    """Google Gemini REST API'sine (gemini-1.5-flash / gemini-2.0-flash) istek atar."""
+    if not api_key or not api_key.strip():
+        return None
+    try:
+        endpoint_model = "gemini-1.5-flash"
+        if "2.0" in model_name:
+            endpoint_model = "gemini-2.0-flash"
+        elif "pro" in model_name.lower():
+            endpoint_model = "gemini-1.5-pro"
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{endpoint_model}:generateContent?key={api_key.strip()}"
+        payload = json.dumps({
+            "contents": [
+                {
+                    "parts": [{"text": prompt}]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.85,
+                "maxOutputTokens": 100
+            }
+        }).encode('utf-8')
+
+        req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=10.0) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            candidates = data.get("candidates", [])
+            if candidates:
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                if parts:
+                    return parts[0].get("text", "").strip()
+    except Exception as e:
+        print(f"Gemini API Hatası: {e}")
+    return None
+
+
 def _find_task_context(task_name):
     """Görev adındaki anahtar kelimeleri Türkçe harf uyumlu analiz edip bağlamsal mesaj havuzunu bulur."""
     task_clean = tr_lower(task_name)
@@ -704,8 +747,25 @@ def generate_ai_roast(task_name, days_missed=0, personality="Sert & Direkt", mod
     streak_info = "Yine zinciri kırdın!" if days_missed > 1 else "Günün bitmesine az kaldı!"
     timing_desc = f"{days_missed} gündür aksatılıyor" if days_missed > 1 else "bugün henüz yapılmadı"
 
+    # 0. Google Gemini Bulut Modeli
+    if model_choice.startswith("Google Gemini"):
+        api_key = ""
+        if hasattr(HabitTrackerApp, "CURRENT_INSTANCE") and HabitTrackerApp.CURRENT_INSTANCE:
+            api_key = HabitTrackerApp.CURRENT_INSTANCE.settings.get("gemini_api_key", "")
+        if api_key:
+            system_style = custom_prompt if (personality == "Özel" and custom_prompt) else {
+                "Sert & Direkt": "Sen sert, direkt ve net konuşan bir Türkçe görev takip koçusun. Görevi anla ve kullanıcıya özel kısa (tek cümle), vurucu ve harekete geçirici bir hatırlatma yap.",
+                "Alaycı & Esprili": "Sen esprili, iğneleyici ve hafif alaycı bir Türkçe görev takip asistanısın. Görevi anla ve kullanıcıya komik, laf sokan ama tatlı tek cümlelik bir hatırlatma yap.",
+                "Motivasyonel": "Sen pozitif, motive edici bir Türkçe yaşam koçusun. Görevi anla ve kullanıcıya tek cümlelik cesaretlendirici, ilham verici bir mesaj yaz."
+            }.get(personality, "Kısa ve net bir görev hatırlatması yap.")
+
+            prompt = f"{system_style}\n\nGörev: '{task_name}'. Bu görev {timing_desc}. Kullanıcıya hitaben doğal, samimi ve Türkçe tek bir kısa cümle yaz (tırnak işareti olmadan):"
+            res = query_gemini(api_key, model_choice, prompt)
+            if res:
+                return res.strip('"').strip("'").strip()
+
     # 1. Ollama modeli
-    if model_choice.startswith("[Ollama] "):
+    elif model_choice.startswith("[Ollama] "):
         m_name = model_choice.replace("[Ollama] ", "").strip()
         system_style = custom_prompt if (personality == "Özel" and custom_prompt) else {
             "Sert & Direkt": "Sen sert, direkt ve net konuşan bir Türkçe görev takip asistanısın. Görevin ne olduğunu anla ve ona özel kısa, vurucu bir hatırlatma yap.",
@@ -1405,6 +1465,276 @@ class NotificationPopup(ctk.CTkToplevel):
 
 
 # ============================================================
+#  GLOBAL KISAYOL (CTRL+SHIFT+T) - NATIVE WINDOWS HOTKEY
+# ============================================================
+class GlobalHotkeyManager:
+    """Windows ctypes RegisterHotKey ile sıfır CPU harcayan arka plan global kısayol yöneticisi."""
+    HOTKEY_ID = 101
+    MOD_CONTROL = 0x0002
+    MOD_SHIFT = 0x0004
+    VK_T = 0x54
+
+    def __init__(self, callback):
+        self.callback = callback
+        self.running = True
+        self.thread = threading.Thread(target=self._msg_loop, daemon=True)
+        self.thread.start()
+
+    def _msg_loop(self):
+        try:
+            user32 = ctypes.windll.user32
+            # Hotkey kaydet: Ctrl + Shift + T
+            if not user32.RegisterHotKey(None, self.HOTKEY_ID, self.MOD_CONTROL | self.MOD_SHIFT, self.VK_T):
+                return
+
+            import ctypes.wintypes
+            msg = ctypes.wintypes.MSG()
+            while self.running:
+                # GetMessageW tuşa basılana kadar 0 CPU ile bekler
+                res = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+                if res == 0 or res == -1 or not self.running:
+                    break
+                if msg.message == 0x0312:  # WM_HOTKEY
+                    if msg.wParam == self.HOTKEY_ID:
+                        if self.callback and self.running:
+                            self.callback()
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+        except Exception:
+            pass
+        finally:
+            try:
+                ctypes.windll.user32.UnregisterHotKey(None, self.HOTKEY_ID)
+            except Exception:
+                pass
+
+    def stop(self):
+        self.running = False
+        try:
+            ctypes.windll.user32.UnregisterHotKey(None, self.HOTKEY_ID)
+            ctypes.windll.user32.PostQuitMessage(0)
+        except Exception:
+            pass
+
+
+# ============================================================
+#  KAYAN MİNİ WİDGET (STICKY MODE - ALWAYS ON TOP)
+# ============================================================
+class StickyWidget(ctk.CTkToplevel):
+    """Her zaman üstte duran, sürüklenebilir ve kompakt lofi mini görev widget'ı."""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.title("📌 Mini Görevler")
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+
+        screen_w = self.winfo_screenwidth()
+        x = self.parent.settings.get("sticky_x", screen_w - 270)
+        y = self.parent.settings.get("sticky_y", 80)
+        self.geometry(f"250x320+{max(0, x)}+{max(0, y)}")
+
+        theme = self.parent.get_theme()
+        self.configure(fg_color=theme["bg"])
+
+        self._drag_start_x = 0
+        self._drag_start_y = 0
+
+        self.setup_ui()
+        self.bind_events()
+
+    def setup_ui(self):
+        theme = self.parent.get_theme()
+
+        # Dış Kart
+        self.card = ctk.CTkFrame(
+            self, fg_color=theme["card"], corner_radius=14,
+            border_width=1.5, border_color=theme.get("accent", "#7C3AED")
+        )
+        self.card.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # Başlık Çubuğu (Sürüklenebilir)
+        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=32, corner_radius=10)
+        self.header.pack(fill="x", padx=5, pady=(5, 3))
+        self.header.pack_propagate(False)
+
+        # Başlık & Sürükleme İkonu
+        self.title_lbl = ctk.CTkLabel(
+            self.header, text="📌 Görevler", font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme["text"]
+        )
+        self.title_lbl.pack(side="left", padx=8)
+
+        # İlerleme Rozeti
+        done, total = self.parent.get_today_progress()
+        self.progress_lbl = ctk.CTkLabel(
+            self.header, text=f"{done}/{total}", font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme.get("accent", "#FB7185")
+        )
+        self.progress_lbl.pack(side="left", padx=2)
+
+        # Kapat / Gizle Butonu
+        self.close_btn = ctk.CTkButton(
+            self.header, text="✕", width=20, height=20,
+            fg_color="transparent", hover_color=theme["btn_danger"],
+            text_color=theme["text"], corner_radius=10, font=ctk.CTkFont(size=10, weight="bold"),
+            command=self.hide_widget
+        )
+        self.close_btn.pack(side="right", padx=4)
+
+        # Ana Pencereyi Aç / Büyüt Butonu
+        self.expand_btn = ctk.CTkButton(
+            self.header, text="📂", width=20, height=20,
+            fg_color="transparent", hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"], corner_radius=10, font=ctk.CTkFont(size=10),
+            command=self.restore_main_window
+        )
+        self.expand_btn.pack(side="right", padx=2)
+
+        # Görevler Kaydırılabilir Listesi
+        self.scroll_frame = ctk.CTkScrollableFrame(self.card, fg_color="transparent")
+        self.scroll_frame.pack(fill="both", expand=True, padx=3, pady=(2, 4))
+
+        self.render_tasks()
+
+    def render_tasks(self):
+        if not hasattr(self, "scroll_frame") or not self.scroll_frame.winfo_exists():
+            return
+        for w in self.scroll_frame.winfo_children():
+            try:
+                w.destroy()
+            except Exception:
+                pass
+
+        theme = self.parent.get_theme()
+        today = self.parent.today
+
+        if not self.parent.tasks:
+            ctk.CTkLabel(
+                self.scroll_frame, text="Henüz görev yok",
+                font=ctk.CTkFont(size=11), text_color=theme["text_secondary"]
+            ).pack(pady=20)
+            return
+
+        for task in self.parent.tasks:
+            target = self.parent.get_task_target(task)
+            is_done = self.parent.get_task_state(today, task)
+
+            row = ctk.CTkFrame(self.scroll_frame, fg_color=theme["card_alt"], corner_radius=8, height=28)
+            row.pack(fill="x", pady=2)
+            row.pack_propagate(False)
+
+            if target > 1:
+                cnt = self.parent.get_task_count(today, task)
+                badge_text = f"✓{target}" if is_done else f"{cnt}/{target}"
+                badge_color = theme.get("done", "#789262") if is_done else theme["btn_primary"]
+
+                cnt_btn = ctk.CTkButton(
+                    row, text=badge_text, width=42, height=22,
+                    fg_color=badge_color, hover_color=theme["btn_primary_hover"],
+                    text_color="#FFFFFF" if is_done else theme["text"],
+                    corner_radius=6, font=ctk.CTkFont(size=9, weight="bold"),
+                    command=lambda t=task: self.on_task_click(t)
+                )
+                cnt_btn.pack(side="left", padx=4)
+                cnt_btn.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
+            else:
+                chk_text = "✓" if is_done else " "
+                chk_color = theme.get("done", "#789262") if is_done else theme["card"]
+                chk_btn = ctk.CTkButton(
+                    row, text=chk_text, width=22, height=22,
+                    fg_color=chk_color, hover_color=theme["btn_primary_hover"],
+                    border_width=1, border_color=theme.get("done", "#789262") if is_done else theme.get("border", theme.get("entry_border", "#D1D5DB")),
+                    text_color="#FFFFFF", corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"),
+                    command=lambda t=task: self.on_task_click(t)
+                )
+                chk_btn.pack(side="left", padx=4)
+                chk_btn.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
+
+            # Görev Adı
+            lbl = ctk.CTkLabel(
+                row, text=task, anchor="w",
+                font=ctk.CTkFont(size=10, overstrike=is_done),
+                text_color=theme["text_secondary"] if is_done else theme["text"]
+            )
+            lbl.pack(side="left", fill="x", expand=True, padx=4)
+            lbl.bind("<Button-1>", lambda e, t=task: self.on_task_click(t))
+            lbl.bind("<Button-3>", lambda e, t=task: self.on_task_right_click(t))
+
+        # Başlıktaki ilerleme sayısını güncelle
+        done, total = self.parent.get_today_progress()
+        self.progress_lbl.configure(text=f"{done}/{total}")
+
+    def on_task_click(self, task_name):
+        target = self.parent.get_task_target(task_name)
+        if target > 1:
+            self.parent.increment_task(self.parent.today, task_name)
+        else:
+            self.parent.toggle_task(self.parent.today, task_name)
+        self.render_tasks()
+        self.parent.render_table()
+        self.parent.update_charts()
+        self.parent.update_progress()
+        self.parent.check_daily_completion()
+
+    def on_task_right_click(self, task_name):
+        target = self.parent.get_task_target(task_name)
+        if target > 1:
+            self.parent.decrement_task(self.parent.today, task_name)
+        else:
+            self.parent.set_task_state(self.parent.today, task_name, False)
+            play_task_sound(is_checking=False)
+        self.render_tasks()
+        self.parent.render_table()
+        self.parent.update_charts()
+        self.parent.update_progress()
+
+    def apply_theme(self):
+        theme = self.parent.get_theme()
+        self.configure(fg_color=theme["bg"])
+        self.card.configure(fg_color=theme["card"], border_color=theme.get("accent", "#7C3AED"))
+        self.header.configure(fg_color=theme["card_alt"])
+        self.title_lbl.configure(text_color=theme["text"])
+        self.progress_lbl.configure(text_color=theme.get("accent", "#FB7185"))
+        self.close_btn.configure(text_color=theme["text"])
+        self.expand_btn.configure(text_color=theme["text"])
+        self.render_tasks()
+
+    def bind_events(self):
+        for w in (self.header, self.title_lbl, self.progress_lbl):
+            w.bind("<Button-1>", self._start_drag)
+            w.bind("<B1-Motion>", self._on_drag)
+            w.bind("<ButtonRelease-1>", self._stop_drag)
+
+    def _start_drag(self, event):
+        self._drag_start_x = event.x_root - self.winfo_x()
+        self._drag_start_y = event.y_root - self.winfo_y()
+
+    def _on_drag(self, event):
+        x = event.x_root - self._drag_start_x
+        y = event.y_root - self._drag_start_y
+        self.geometry(f"+{x}+{y}")
+
+    def _stop_drag(self, event):
+        self.parent.settings["sticky_x"] = self.winfo_x()
+        self.parent.settings["sticky_y"] = self.winfo_y()
+        self.parent.save_data()
+
+    def hide_widget(self):
+        play_button_sound()
+        self.withdraw()
+
+    def show_widget(self):
+        self.deiconify()
+        self.lift()
+        self.render_tasks()
+
+    def restore_main_window(self):
+        play_button_sound()
+        self.parent.restore_from_tray()
+
+
+# ============================================================
 #  AYARLAR PENCERESİ
 # ============================================================
 class SettingsWindow(ctk.CTkToplevel):
@@ -1444,11 +1774,13 @@ class SettingsWindow(ctk.CTkToplevel):
         self.tab_theme = self.tabview.add("🎨 Tema")
         self.tab_sound = self.tabview.add("🔊 Ses")
         self.tab_ai = self.tabview.add("🤖 AI Darlama")
+        self.tab_widget = self.tabview.add("📌 Kayan Widget")
 
         self.setup_tasks_tab(theme)
         self.setup_theme_tab(theme)
         self.setup_sound_tab(theme)
         self.setup_ai_notifications_tab(theme)
+        self.setup_widget_tab(theme)
 
     # ---------- GÖREVLER ----------
     def setup_tasks_tab(self, theme):
@@ -1916,7 +2248,43 @@ class SettingsWindow(ctk.CTkToplevel):
                                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                                       text_color=theme["text"], font=ctk.CTkFont(size=11, weight="bold"),
                                       command=self.refresh_ai_models)
-        self.scan_btn.pack(side="left")
+        self.m_box = m_box
+
+        # Gemini API Key Kartı
+        self.gemini_box = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
+        if "gemini" in cur_model.lower():
+            self.gemini_box.pack(fill="x", padx=6, pady=4)
+
+        ctk.CTkLabel(self.gemini_box, text="🔑 Google Gemini API Anahtarı",
+                     font=ctk.CTkFont(weight="bold", size=13),
+                     text_color=theme["text"]).pack(anchor="w", padx=12, pady=(10, 2))
+        ctk.CTkLabel(self.gemini_box, text="Google AI Studio'dan aldığınız ücretsiz API anahtarınızı girin",
+                     font=ctk.CTkFont(size=11),
+                     text_color=theme["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 6))
+
+        g_row = ctk.CTkFrame(self.gemini_box, fg_color="transparent")
+        g_row.pack(fill="x", padx=12, pady=(0, 4))
+
+        self.gemini_key_entry = ctk.CTkEntry(g_row, placeholder_text="AIzaSy...",
+                                             width=280, height=28, corner_radius=8,
+                                             fg_color=theme["entry_bg"], border_color=theme["entry_border"],
+                                             text_color=theme["text"], show="*")
+        self.gemini_key_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.gemini_key_entry.insert(0, self.parent.settings.get("gemini_api_key", ""))
+        self.gemini_key_entry.bind("<KeyRelease>", lambda e: self.on_gemini_key_change())
+
+        self.gemini_show_btn = ctk.CTkButton(g_row, text="👁️", width=34, height=28, corner_radius=8,
+                                             fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                                             text_color=theme["text"], command=self.toggle_gemini_key_visibility)
+        self.gemini_show_btn.pack(side="left", padx=(0, 6))
+
+        g_btn_row = ctk.CTkFrame(self.gemini_box, fg_color="transparent")
+        g_btn_row.pack(fill="x", padx=12, pady=(4, 10))
+
+        ctk.CTkButton(g_btn_row, text="🔑 Ücretsiz API Key Al (AI Studio)", height=26, corner_radius=8,
+                      fg_color=theme.get("accent", "#7C3AED"), hover_color=theme["btn_primary_hover"],
+                      text_color="#FFFFFF", font=ctk.CTkFont(size=10, weight="bold"),
+                      command=lambda: webbrowser.open("https://aistudio.google.com/app/apikey")).pack(side="left", padx=(0, 6))
 
         # 3. Mesaj Tarzı
         p_box = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
@@ -2051,6 +2419,85 @@ class SettingsWindow(ctk.CTkToplevel):
         play_button_sound()
         self.parent.settings["ai_model"] = choice
         self.parent.save_data()
+        if hasattr(self, "gemini_box") and self.gemini_box.winfo_exists():
+            if "gemini" in choice.lower():
+                self.gemini_box.pack(fill="x", padx=6, pady=4, after=self.m_box)
+            else:
+                self.gemini_box.pack_forget()
+
+    def on_gemini_key_change(self):
+        try:
+            if hasattr(self, "gemini_key_entry") and self.gemini_key_entry.winfo_exists():
+                val = self.gemini_key_entry.get().strip()
+                self.parent.settings["gemini_api_key"] = val
+                self.parent.save_data()
+        except Exception:
+            pass
+
+    def toggle_gemini_key_visibility(self):
+        play_button_sound()
+        try:
+            cur_show = self.gemini_key_entry.cget("show")
+            if cur_show == "*":
+                self.gemini_key_entry.configure(show="")
+                self.gemini_show_btn.configure(text="🔒")
+            else:
+                self.gemini_key_entry.configure(show="*")
+                self.gemini_show_btn.configure(text="👁️")
+        except Exception:
+            pass
+
+    def setup_widget_tab(self, theme):
+        scroll = ctk.CTkScrollableFrame(self.tab_widget, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # 1. Kayan Mini Widget Kontrol Kartı
+        c1 = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
+        c1.pack(fill="x", padx=6, pady=6)
+
+        ctk.CTkLabel(c1, text="📌 Kayan Mini Widget (Sticky Mode)",
+                     font=ctk.CTkFont(weight="bold", size=14),
+                     text_color=theme["text"]).pack(anchor="w", padx=12, pady=(12, 4))
+        ctk.CTkLabel(c1, text="Ekranın köşesinde her zaman üstte duran, şeffaf ve minimalist kompakt görev kartı.",
+                     font=ctk.CTkFont(size=11), text_color=theme["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 8))
+
+        c1_btns = ctk.CTkFrame(c1, fg_color="transparent")
+        c1_btns.pack(fill="x", padx=12, pady=(4, 12))
+
+        ctk.CTkButton(
+            c1_btns, text="📌 Kayan Mini Modu Aç", height=32, corner_radius=10,
+            fg_color=theme.get("accent", "#7C3AED"), hover_color=theme["btn_primary_hover"],
+            text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.parent.open_sticky_widget
+        ).pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            c1_btns, text="✕ Gizle / Kapat", height=32, corner_radius=10,
+            fg_color=theme["card"], hover_color=theme["btn_danger"],
+            text_color=theme["text"], font=ctk.CTkFont(size=11),
+            command=self.parent.hide_sticky_widget
+        ).pack(side="left")
+
+        # 2. Global Kısayol Kartı
+        c2 = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
+        c2.pack(fill="x", padx=6, pady=6)
+
+        ctk.CTkLabel(c2, text="⌨️ Global Klavye Kısayolu",
+                     font=ctk.CTkFont(weight="bold", size=14),
+                     text_color=theme["text"]).pack(anchor="w", padx=12, pady=(12, 4))
+        ctk.CTkLabel(c2, text="Hangi uygulamada veya oyunda olursanız olun klavyenizden kısayola basarak uygulamayı veya mini widget'ı anında açıp gizleyebilirsiniz.",
+                     font=ctk.CTkFont(size=11), text_color=theme["text_secondary"], wraplength=460, justify="left").pack(anchor="w", padx=12, pady=(0, 8))
+
+        hk_row = ctk.CTkFrame(c2, fg_color="transparent")
+        hk_row.pack(fill="x", padx=12, pady=(4, 12))
+
+        hk_badge = ctk.CTkFrame(hk_row, fg_color=theme["card"], corner_radius=8, border_width=1, border_color=theme.get("accent", "#7C3AED"))
+        hk_badge.pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(hk_badge, text="Ctrl + Shift + T", font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color=theme.get("accent", "#7C3AED")).pack(padx=12, pady=6)
+
+        ctk.CTkLabel(hk_row, text="✅ Sistemde Aktif (%0 CPU)", font=ctk.CTkFont(size=11, weight="bold"),
+                     text_color=theme.get("done", "#789262")).pack(side="left")
 
     def refresh_ai_models(self):
         play_button_sound()
@@ -2226,6 +2673,13 @@ class HabitTrackerApp(ctk.CTk):
         self.settings.setdefault("ai_interval", "45 Dk")
         self.settings.setdefault("ai_target_tasks", list(self.tasks))
         self.settings.setdefault("last_ai_notification_time", 0)
+        self.settings.setdefault("gemini_api_key", "")
+        self.settings.setdefault("sticky_x", max(0, self.winfo_screenwidth() - 270))
+        self.settings.setdefault("sticky_y", 80)
+
+        # Kayan Mini Widget & Global Hotkey (Ctrl+Shift+T)
+        self.sticky_widget = None
+        self.hotkey_mgr = GlobalHotkeyManager(self.toggle_from_hotkey)
 
         # Tema modu
         mode = self.settings.get("mode", "light")
@@ -2551,6 +3005,10 @@ class HabitTrackerApp(ctk.CTk):
         # Buttons
         self.settings_btn.configure(fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
                                     text_color=theme["text"])
+        if hasattr(self, "sticky_btn"):
+            self.sticky_btn.configure(fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"], text_color=theme["text"])
+        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
+            self.sticky_widget.apply_theme()
 
         # Top Frame / Chart Containers
         self.top_frame.configure(fg_color=theme["card"])
@@ -2695,6 +3153,14 @@ class HabitTrackerApp(ctk.CTk):
         if mode == "dark":
             self.mode_switch.select()
         self.mode_switch.pack(side="left", padx=(0, 10))
+
+        # Kayan Mini Widget Butonu
+        self.sticky_btn = ctk.CTkButton(
+            self.right_header, text="📌 Mini", width=68, height=30,
+            fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"], corner_radius=12, font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.toggle_sticky_mode)
+        self.sticky_btn.pack(side="left", padx=(0, 6))
 
         # Ayarlar butonu (Yumuşak hap şeklinde)
         self.settings_btn = ctk.CTkButton(
@@ -2903,6 +3369,9 @@ class HabitTrackerApp(ctk.CTk):
             if hasattr(self, "shield_lbl"):
                 freezes = self.settings.get("streak_freezes", 1)
                 self.shield_lbl.configure(text=f"🛡️ {freezes} Kalkan" if freezes > 0 else "🛡️ Kalkan Yok")
+
+        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
+            self.sticky_widget.render_tasks()
 
     # ---------- ULTRA-HIZLI VE YUMUŞAK PASTEL AYLIK TABLO ----------
     def render_table(self):
@@ -3518,13 +3987,14 @@ class HabitTrackerApp(ctk.CTk):
         self.render_table()
         self.update_charts()
 
-    # ---------- SİSTEM TEPSİSİ & ARKA PLAN MODU ----------
+    # ---------- SİSTEM TEPSİSİ, KAYAN WİDGET & ARKA PLAN MODU ----------
     def setup_tray_icon(self):
         """Pencere kapatıldığında arka planda %0 CPU ile çalışacak sistem tepsisi ikonu."""
         try:
             icon_img = create_tray_icon_image()
             menu = pystray.Menu(
                 pystray.MenuItem("📂 Uygulamayı Aç", lambda icon, item: self.restore_from_tray(), default=True),
+                pystray.MenuItem("📌 Kayan Mini Modu Aç/Kapat", lambda icon, item: self.after(0, self.toggle_sticky_mode)),
                 pystray.MenuItem("⚡ Şimdi Darlama Bildirimi Gönder", lambda icon, item: self.after(0, lambda: self.trigger_ai_notification(is_test=True))),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("❌ Tamamen Kapat", lambda icon, item: self.after(0, self.quit_app))
@@ -3533,6 +4003,40 @@ class HabitTrackerApp(ctk.CTk):
             threading.Thread(target=self.tray_icon.run, daemon=True).start()
         except Exception as e:
             print(f"Sistem tepsisi başlatma hatası: {e}")
+
+    def toggle_sticky_mode(self):
+        """Kayan Mini Widget modunu açar veya kapatır."""
+        play_button_sound()
+        if not hasattr(self, "sticky_widget") or self.sticky_widget is None or not self.sticky_widget.winfo_exists():
+            self.sticky_widget = StickyWidget(self)
+
+        if self.sticky_widget.winfo_viewable():
+            self.sticky_widget.hide_widget()
+        else:
+            self.sticky_widget.show_widget()
+
+    def open_sticky_widget(self):
+        play_button_sound()
+        if not hasattr(self, "sticky_widget") or self.sticky_widget is None or not self.sticky_widget.winfo_exists():
+            self.sticky_widget = StickyWidget(self)
+        self.sticky_widget.show_widget()
+
+    def hide_sticky_widget(self):
+        play_button_sound()
+        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
+            self.sticky_widget.hide_widget()
+
+    def toggle_from_hotkey(self):
+        """Global kısayola (Ctrl+Shift+T) basıldığında arka plandan tetiklenir."""
+        self.after(0, self._on_hotkey_pressed)
+
+    def _on_hotkey_pressed(self):
+        if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists() and self.sticky_widget.winfo_viewable():
+            self.sticky_widget.hide_widget()
+        elif self.state() == "withdrawn" or self.state() == "iconic":
+            self.restore_from_tray()
+        else:
+            self.open_sticky_widget()
 
     def hide_to_tray(self):
         """Pencereyi gizler, sistem tepsisinde arka planda hafifçe çalışmaya devam eder."""
@@ -3566,6 +4070,11 @@ class HabitTrackerApp(ctk.CTk):
 
     def quit_app(self):
         """Uygulamayı ve tüm arka plan süreçlerini anında ve tamamen sonlandırır."""
+        if hasattr(self, "hotkey_mgr") and self.hotkey_mgr:
+            try:
+                self.hotkey_mgr.stop()
+            except Exception:
+                pass
         if hasattr(self, "lock_socket") and self.lock_socket:
             try:
                 self.lock_socket.close()
