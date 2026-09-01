@@ -196,18 +196,63 @@ SOUND_OPTIONS = {
 
 
 class SoundEngine:
-    """Windows yerel C motoruyla çalışan, sıfır gecikmeli ve sıfır thread yüküyle ses çalar."""
+    """Windows yerel C motoru ve RAM tamponuyla çalışan, sıfır gecikmeli ses motoru."""
+    _CACHE = {}
+    _INITIALIZED = False
+    SND_ASYNC = 0x0001
+    SND_NODEFAULT = 0x0002
+    SND_MEMORY = 0x0004
+
+    @classmethod
+    def init_engine(cls):
+        """Uygulama açılışında sesleri RAM'e yükler ve Windows ses sürücüsünü ısıtır (ilk tıklama kaybını önler)."""
+        if cls._INITIALIZED:
+            return
+        cls._INITIALIZED = True
+
+        def _warmup():
+            try:
+                if not os.path.exists(SOUNDS_DIR):
+                    return
+                for f in os.listdir(SOUNDS_DIR):
+                    if f.endswith(".wav"):
+                        p = os.path.join(SOUNDS_DIR, f)
+                        try:
+                            with open(p, "rb") as fp:
+                                cls._CACHE[f] = fp.read()
+                        except Exception:
+                            pass
+                # Windows ses kanalını uyandır ve hazırda beklet
+                if "tactile_pop.wav" in cls._CACHE:
+                    ctypes.windll.winmm.PlaySoundA(cls._CACHE["tactile_pop.wav"], None, cls.SND_ASYNC | cls.SND_NODEFAULT | cls.SND_MEMORY)
+                    ctypes.windll.winmm.PlaySoundA(None, None, 0)
+            except Exception:
+                pass
+
+        threading.Thread(target=_warmup, daemon=True).start()
+
     @classmethod
     def play(cls, file_name):
         if not file_name:
             return
-        file_path = os.path.join(SOUNDS_DIR, file_name)
-        if not os.path.exists(file_path):
-            return
+        buf = cls._CACHE.get(file_name)
+        if not buf:
+            file_path = os.path.join(SOUNDS_DIR, file_name)
+            if not os.path.exists(file_path):
+                return
+            try:
+                with open(file_path, "rb") as fp:
+                    buf = fp.read()
+                    cls._CACHE[file_name] = buf
+            except Exception:
+                return
         try:
-            winsound.PlaySound(file_path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+            ctypes.windll.winmm.PlaySoundA(buf, None, cls.SND_ASYNC | cls.SND_NODEFAULT | cls.SND_MEMORY)
         except Exception:
             pass
+
+
+SoundEngine.init_engine()
 
 
 def play_task_sound(is_checking=True):
@@ -2714,6 +2759,7 @@ class HabitTrackerApp(ctk.CTk):
         # Kayan Mini Widget & Global Hotkey (Ctrl+Shift+T)
         self.sticky_widget = None
         self.hotkey_mgr = GlobalHotkeyManager(self.toggle_from_hotkey)
+        SoundEngine.init_engine()
 
         # Tema modu
         mode = self.settings.get("mode", "light")
