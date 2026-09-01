@@ -539,7 +539,7 @@ GENERAL_MESSAGES = {
         "Bugün '{task}' için bir şey yapmadın. Ertelemenin sonu yok, başla.",
         "'{task}' hâlâ bekliyor. Ne zaman halledeceksin?",
         "'{task}' görevi kendi kendine bitmeyecek. Şimdi harekete geç.",
-        "{days_info} '{task}' için bugünü kaçırma.",
+        "{days_info} Bugünü sakın kaçırma.",
         "Yarın yaparım demeyi bırak, '{task}' şimdi yapılacak.",
     ],
     "Alaycı & Esprili": [
@@ -547,7 +547,7 @@ GENERAL_MESSAGES = {
         "'{task}' seni beklemekten bıktı ama sen rahatına bak tabii.",
         "Bugün de '{task}' yapılmadı, şaşırdık mı? Tabii ki hayır.",
         "'{task}' görevine gerçek bir sahip arıyoruz, ilgilenen?",
-        "{days_info} '{task}' hâlâ yapılmamış, komik değil mi?",
+        "{days_info} Hâlâ bekliyor, komik değil mi?",
     ],
     "Motivasyonel": [
         "'{task}' için bugün küçük bir adım at, büyük fark yaratır!",
@@ -557,6 +557,19 @@ GENERAL_MESSAGES = {
         "Disiplin motivasyondan güçlüdür. '{task}' şimdi yap, sonra rahatla!",
     ],
 }
+
+
+def tr_lower(text):
+    """Türkçe İ/I, Ş, Ğ, Ü, Ö, Ç karakterlerini doğru ve uyumlu küçük harfe dönüştürür."""
+    if not text:
+        return ""
+    mapping = {
+        "İ": "i", "I": "ı", "Ş": "ş", "Ğ": "ğ",
+        "Ü": "ü", "Ö": "ö", "Ç": "ç"
+    }
+    for upper_c, lower_c in mapping.items():
+        text = text.replace(upper_c, lower_c)
+    return text.lower()
 
 
 def query_ollama(model_name, prompt):
@@ -617,10 +630,10 @@ def query_lm_studio(model_name, prompt):
 
 
 def _find_task_context(task_name):
-    """Görev adındaki anahtar kelimeleri analiz edip bağlamsal mesaj havuzunu bulur."""
-    task_lower = task_name.lower()
+    """Görev adındaki anahtar kelimeleri Türkçe harf uyumlu analiz edip bağlamsal mesaj havuzunu bulur."""
+    task_clean = tr_lower(task_name)
     for keywords, messages in TASK_CONTEXT_MESSAGES.items():
-        if any(kw in task_lower for kw in keywords):
+        if any(tr_lower(kw) in task_clean for kw in keywords):
             return messages
     return None
 
@@ -629,6 +642,7 @@ def generate_ai_roast(task_name, days_missed=0, personality="Sert & Direkt", mod
     """Seçilen AI modeli veya akıllı dahili motor ile görev-bağlamsal Türkçe hatırlatma üretir."""
     days_info = f"{days_missed} gündür '{task_name}' yapılmıyor!" if days_missed > 1 else f"Bugün '{task_name}' hâlâ yapılmadı!"
     streak_info = "Yine zinciri kırdın!" if days_missed > 1 else "Günün bitmesine az kaldı!"
+    timing_desc = f"{days_missed} gündür aksatılıyor" if days_missed > 1 else "bugün henüz yapılmadı"
 
     # 1. Ollama modeli
     if model_choice.startswith("[Ollama] "):
@@ -639,7 +653,7 @@ def generate_ai_roast(task_name, days_missed=0, personality="Sert & Direkt", mod
             "Motivasyonel": "Sen pozitif, motive edici bir Türkçe görev takip asistanısın. Görevin ne olduğunu anla ve ona özel cesaretlendirici bir mesaj yaz."
         }.get(personality, "Kısa ve net bir görev hatırlatması yap.")
 
-        prompt = f"{system_style}\nGörev: '{task_name}'. {days_missed} gündür yapılmıyor. Bu göreve özel, doğal ve samimi tek cümlelik Türkçe bir hatırlatma yaz:"
+        prompt = f"{system_style}\nGörev: '{task_name}'. Bu görev {timing_desc}. Bu göreve özel, doğal ve samimi tek cümlelik Türkçe bir hatırlatma yaz:"
         res = query_ollama(m_name, prompt)
         if res:
             return res.strip('"').strip("'")
@@ -648,7 +662,7 @@ def generate_ai_roast(task_name, days_missed=0, personality="Sert & Direkt", mod
     elif model_choice.startswith("[LM Studio] "):
         m_name = model_choice.replace("[LM Studio] ", "").strip()
         system_style = custom_prompt if (personality == "Özel" and custom_prompt) else "Sen görev hatırlatma yapan bir Türkçe AI asistanısın. Görevi anla ve ona özel doğal bir hatırlatma yaz."
-        prompt = f"{system_style}\nGörev: '{task_name}'. {days_missed} gündür yapılmadı. Bu göreve özel tek cümlelik doğal bir hatırlatma yaz:"
+        prompt = f"{system_style}\nGörev: '{task_name}'. Bu görev {timing_desc}. Bu göreve özel tek cümlelik doğal bir hatırlatma yaz:"
         res = query_lm_studio(m_name, prompt)
         if res:
             return res.strip('"').strip("'")
@@ -2943,13 +2957,20 @@ class HabitTrackerApp(ctk.CTk):
 
     # ---------- AI DARLAMA BİLDİRİM SİSTEMİ ----------
     def get_task_missed_days(self, task_name):
-        """Görevin geriye dönük kaç gündür yapılmadığını hesaplar."""
+        """Görevin geriye dönük kaç gündür aksatıldığını hesaplar (yalnızca var olduğu geçmiş kayıtlar taranır)."""
         days = 0
         check_date = self.today - datetime.timedelta(days=1)
-        while days < 30:
+        for _ in range(30):
             ds = check_date.strftime("%Y-%m-%d")
-            rec = self.records.get(ds, {})
+            if ds not in self.records:
+                # Veri tabanında bu gün için hiçbir kayıt yoksa geriye gitmeyi durdur
+                break
+            rec = self.records[ds]
+            if task_name not in rec:
+                # Bu görev o tarihte henüz eklenmemişse geçmişi saymayı durdur
+                break
             if rec.get(task_name, False):
+                # Görev o gün yapılmış, aksatma serisi sonlandı
                 break
             days += 1
             check_date -= datetime.timedelta(days=1)
