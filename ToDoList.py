@@ -1793,13 +1793,11 @@ class SettingsWindow(ctk.CTkToplevel):
         self.tab_theme = self.tabview.add("🎨 Tema")
         self.tab_sound = self.tabview.add("🔊 Ses")
         self.tab_ai = self.tabview.add("🤖 AI Darlama")
-        self.tab_widget = self.tabview.add("📌 Kayan Widget")
 
         self.setup_tasks_tab(theme)
         self.setup_theme_tab(theme)
         self.setup_sound_tab(theme)
         self.setup_ai_notifications_tab(theme)
-        self.setup_widget_tab(theme)
 
     # ---------- GÖREVLER ----------
     def setup_tasks_tab(self, theme):
@@ -2465,58 +2463,6 @@ class SettingsWindow(ctk.CTkToplevel):
                 self.gemini_show_btn.configure(text="👁️")
         except Exception:
             pass
-
-    def setup_widget_tab(self, theme):
-        scroll = ctk.CTkScrollableFrame(self.tab_widget, fg_color="transparent")
-        scroll.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # 1. Kayan Mini Widget Kontrol Kartı
-        c1 = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
-        c1.pack(fill="x", padx=6, pady=6)
-
-        ctk.CTkLabel(c1, text="📌 Kayan Mini Widget (Sticky Mode)",
-                     font=ctk.CTkFont(weight="bold", size=14),
-                     text_color=theme["text"]).pack(anchor="w", padx=12, pady=(12, 4))
-        ctk.CTkLabel(c1, text="Ekranın köşesinde her zaman üstte duran, şeffaf ve minimalist kompakt görev kartı.",
-                     font=ctk.CTkFont(size=11), text_color=theme["text_secondary"]).pack(anchor="w", padx=12, pady=(0, 8))
-
-        c1_btns = ctk.CTkFrame(c1, fg_color="transparent")
-        c1_btns.pack(fill="x", padx=12, pady=(4, 12))
-
-        ctk.CTkButton(
-            c1_btns, text="📌 Kayan Mini Modu Aç", height=32, corner_radius=10,
-            fg_color=theme.get("accent", "#7C3AED"), hover_color=theme["btn_primary_hover"],
-            text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
-            command=self.parent.open_sticky_widget
-        ).pack(side="left", padx=(0, 8))
-
-        ctk.CTkButton(
-            c1_btns, text="✕ Gizle / Kapat", height=32, corner_radius=10,
-            fg_color=theme["card"], hover_color=theme["btn_danger"],
-            text_color=theme["text"], font=ctk.CTkFont(size=11),
-            command=self.parent.hide_sticky_widget
-        ).pack(side="left")
-
-        # 2. Global Kısayol Kartı
-        c2 = ctk.CTkFrame(scroll, fg_color=theme["card_alt"], corner_radius=12)
-        c2.pack(fill="x", padx=6, pady=6)
-
-        ctk.CTkLabel(c2, text="⌨️ Global Klavye Kısayolu",
-                     font=ctk.CTkFont(weight="bold", size=14),
-                     text_color=theme["text"]).pack(anchor="w", padx=12, pady=(12, 4))
-        ctk.CTkLabel(c2, text="Hangi uygulamada veya oyunda olursanız olun klavyenizden kısayola basarak uygulamayı veya mini widget'ı anında açıp gizleyebilirsiniz.",
-                     font=ctk.CTkFont(size=11), text_color=theme["text_secondary"], wraplength=460, justify="left").pack(anchor="w", padx=12, pady=(0, 8))
-
-        hk_row = ctk.CTkFrame(c2, fg_color="transparent")
-        hk_row.pack(fill="x", padx=12, pady=(4, 12))
-
-        hk_badge = ctk.CTkFrame(hk_row, fg_color=theme["card"], corner_radius=8, border_width=1, border_color=theme.get("accent", "#7C3AED"))
-        hk_badge.pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(hk_badge, text="Ctrl + Shift + T", font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color=theme.get("accent", "#7C3AED")).pack(padx=12, pady=6)
-
-        ctk.CTkLabel(hk_row, text="✅ Sistemde Aktif (%0 CPU)", font=ctk.CTkFont(size=11, weight="bold"),
-                     text_color=theme.get("done", "#789262")).pack(side="left")
 
     def refresh_ai_models(self):
         play_button_sound()
