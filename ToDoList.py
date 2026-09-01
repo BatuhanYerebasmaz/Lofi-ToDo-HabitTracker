@@ -1900,8 +1900,47 @@ class DailyNoteTooltip:
             self.current_ds = None
 
 
+def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
+    """Resmi polaroid çerçevesi içine alıp washi tape ve doğal bir eğim açısıyla döndürür."""
+    border_lr = 7
+    border_top = 7
+    border_bottom = 20
+
+    card_w = width + (border_lr * 2)
+    card_h = height + border_top + border_bottom
+
+    # Beyaz Polaroid tabanı (RGBA)
+    polaroid = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(polaroid)
+
+    try:
+        user_img = Image.open(img_path).convert("RGBA")
+        user_img = user_img.resize((width, height), Image.Resampling.LANCZOS)
+        polaroid.paste(user_img, (border_lr, border_top))
+    except Exception:
+        draw.rectangle([border_lr, border_top, border_lr + width, border_top + height], fill=(220, 220, 220, 255))
+
+    # İnce fotoğraf kenarlığı
+    draw.rectangle([border_lr - 1, border_top - 1, border_lr + width, border_top + height],
+                   outline=(210, 210, 210, 255), width=1)
+
+    # Üstte sevimli Washi Tape / Bant efekti
+    tape_w = 34
+    tape_h = 10
+    draw.rectangle([(card_w - tape_w) // 2, 0, (card_w + tape_w) // 2, tape_h],
+                   fill=(238, 185, 145, 200))
+
+    # Yumuşak kenarlı doğal açı döndürmesi
+    if angle != 0:
+        polaroid = polaroid.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+
+    return polaroid
+
+
 class DailyNoteModal(ctk.CTkToplevel):
-    """Günün Notu & Fotoğraf Penceresi (Bugün: Düzenleme / Diğer Günler: Salt Okunur)."""
+    """Tek Yapraklı Defter & Açılı Polaroid Fotoğraflı Günlük Sayfası."""
+    _ANGLES = [-4, 3, -3, 5, -2, 4, -5]
+
     def __init__(self, parent, date_obj):
         super().__init__(parent)
         self.parent = parent
@@ -1909,6 +1948,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.ds = date_obj.strftime("%Y-%m-%d")
         self.is_today = (date_obj == parent.today)
         self.theme = parent.get_theme()
+        self.is_dark = (parent.settings.get("mode", "light") == "dark")
 
         # Var olan not verisini yükle
         raw_data = parent.daily_notes.get(self.ds, {})
@@ -1919,16 +1959,16 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.note_text = str(raw_data)
             self.note_images = []
 
-        self.title("📝 Günün Notu" if self.is_today else "📖 Notu Oku")
-        self.geometry("520x490")
+        self.title("📖 Günün Defter Sayfası" if self.is_today else "📖 Defter Arşivi")
+        self.geometry("620x650")
         self.resizable(False, False)
         self.transient(parent)
         self.attributes("-topmost", True)
         self.configure(fg_color=self.theme["bg"])
 
         try:
-            px = parent.winfo_x() + (parent.winfo_width() - 520) // 2
-            py = parent.winfo_y() + (parent.winfo_height() - 490) // 2
+            px = parent.winfo_x() + (parent.winfo_width() - 620) // 2
+            py = parent.winfo_y() + (parent.winfo_height() - 650) // 2
             self.geometry(f"+{max(20, px)}+{max(20, py)}")
         except Exception:
             pass
@@ -1942,152 +1982,255 @@ class DailyNoteModal(ctk.CTkToplevel):
         wd = self.date_obj.weekday()
         formatted_date = f"{self.date_obj.day} {TURKISH_MONTHS.get(self.date_obj.month, '')} {self.date_obj.year}, {TURKISH_DAYS[wd]}"
 
-        card = ctk.CTkFrame(self, fg_color=theme["card"], corner_radius=16)
-        card.pack(fill="both", expand=True, padx=14, pady=14)
+        # Defter Sayfası Taban Rengi (Kraft / Fildişi Kağıt)
+        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
+        paper_border = "#E8DCCB" if not self.is_dark else "#362D27"
+        text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
+        sub_text_color = "#7D6B5D" if not self.is_dark else "#A8988B"
 
-        # 1. Başlık Alanı
-        head = ctk.CTkFrame(card, fg_color="transparent")
-        head.pack(fill="x", padx=16, pady=(14, 8))
+        # Dış Defter Alanı
+        outer_frame = ctk.CTkFrame(self, fg_color="transparent")
+        outer_frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+        # 1. Sol Spiral Şeridi (Defter Telleri)
+        self.spiral_canvas = tk.Canvas(
+            outer_frame, width=28, bg=self.theme["bg"], highlightthickness=0
+        )
+        self.spiral_canvas.pack(side="left", fill="y", padx=(0, 2))
+        self.draw_spiral_rings()
+
+        # 2. Tek Yapraklı Defter Sayfası (Notebook Sheet)
+        page = ctk.CTkFrame(
+            outer_frame, fg_color=paper_bg, corner_radius=14,
+            border_width=2, border_color=paper_border
+        )
+        page.pack(side="left", fill="both", expand=True)
+
+        # Sayfa İçi Üst Başlık (Tarih & Rozet)
+        head = ctk.CTkFrame(page, fg_color="transparent")
+        head.pack(fill="x", padx=18, pady=(16, 6))
+
+        title_box = ctk.CTkFrame(head, fg_color="transparent")
+        title_box.pack(side="left")
 
         ctk.CTkLabel(
-            head, text=f"📅  {formatted_date}",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=theme["header_text"]
-        ).pack(side="left")
+            title_box, text=f"📌  {formatted_date}",
+            font=ctk.CTkFont(family="Georgia", size=15, weight="bold"),
+            text_color=text_color
+        ).pack(anchor="w")
 
-        badge_text = "✍️ Notu Düzenle" if self.is_today else "📖 Salt Okunur"
+        ctk.CTkLabel(
+            title_box, text="Defter Sayfası & Günlük Notları",
+            font=ctk.CTkFont(size=10, slant="italic"),
+            text_color=sub_text_color
+        ).pack(anchor="w")
+
+        # Rozet & Fotoğraf Butonu
+        action_box = ctk.CTkFrame(head, fg_color="transparent")
+        action_box.pack(side="right")
+
+        badge_text = "✍️ Bugünün Sayfası" if self.is_today else "📖 Salt Okunur"
         badge_bg = theme["btn_primary"] if self.is_today else theme["card_alt"]
         badge_fg = theme["text"] if self.is_today else theme["text_secondary"]
-        badge = ctk.CTkFrame(head, fg_color=badge_bg, corner_radius=8)
-        badge.pack(side="right")
-        ctk.CTkLabel(badge, text=badge_text, font=ctk.CTkFont(size=10, weight="bold"), text_color=badge_fg).pack(padx=8, pady=2)
+        badge = ctk.CTkFrame(action_box, fg_color=badge_bg, corner_radius=8)
+        badge.pack(side="right", padx=(8, 0))
+        ctk.CTkLabel(badge, text=badge_text, font=ctk.CTkFont(size=10, weight="bold"), text_color=badge_fg).pack(padx=8, pady=3)
 
-        # 2. Metin Alanı
-        txt_label_text = "Günün Notu & Düşüncelerin:" if self.is_today else "Bu Günün Notu:"
-        ctk.CTkLabel(
-            card, text=txt_label_text,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=theme["text"]
-        ).pack(anchor="w", padx=16, pady=(4, 4))
+        if self.is_today:
+            ctk.CTkButton(
+                action_box, text="📷 + Fotoğraf İğnele", width=120, height=28, corner_radius=8,
+                fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
+                text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
+                command=self.add_image
+            ).pack(side="right")
+
+        # İnce Defter Çizgisi (Kırmızı / Pastel Kenar Çizgisi)
+        margin_line = ctk.CTkFrame(page, height=1, fg_color="#E5C7B8" if not self.is_dark else "#4D3B31")
+        margin_line.pack(fill="x", padx=18, pady=(4, 10))
+
+        # 3. Polaroid / Açılı Fotoğraflar Alanı (Scrapbook Board)
+        self.photo_scroll = ctk.CTkScrollableFrame(
+            page, height=140, orientation="horizontal",
+            fg_color="transparent", corner_radius=10
+        )
+        self.photo_scroll.pack(fill="x", padx=14, pady=(0, 8))
+
+        self.render_polaroid_gallery()
+
+        # 4. Defter Yazı Alanı (Deftere Not Yazma)
+        txt_frame = ctk.CTkFrame(page, fg_color="transparent")
+        txt_frame.pack(fill="both", expand=True, padx=18, pady=(0, 10))
 
         self.textbox = ctk.CTkTextbox(
-            card, height=150, corner_radius=10,
-            fg_color=theme["entry_bg"], border_width=1, border_color=theme["entry_border"],
-            text_color=theme["text"], font=ctk.CTkFont(size=11)
+            txt_frame, corner_radius=10,
+            fg_color=paper_bg, border_width=1, border_color=paper_border,
+            text_color=text_color, font=ctk.CTkFont(family="Segoe UI", size=12)
         )
-        self.textbox.pack(fill="x", padx=16, pady=(0, 10))
+        self.textbox.pack(fill="both", expand=True)
         if self.note_text:
             self.textbox.insert("1.0", self.note_text)
 
         if not self.is_today:
             self.textbox.configure(state="disabled")
 
-        # 3. Fotoğraf Galerisi Başlığı & Ekle Butonu
-        gal_head = ctk.CTkFrame(card, fg_color="transparent")
-        gal_head.pack(fill="x", padx=16, pady=(0, 4))
-
-        ctk.CTkLabel(
-            gal_head, text="📷  Ekli Fotoğraflar:",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=theme["text"]
-        ).pack(side="left")
+        # 5. Alt Butonlar (Deftere Kaydet / Notu Yırt-Sil / Kapat)
+        btn_bar = ctk.CTkFrame(page, fg_color="transparent")
+        btn_bar.pack(fill="x", padx=18, pady=(0, 14))
 
         if self.is_today:
             ctk.CTkButton(
-                gal_head, text="+ Fotoğraf Ekle", width=105, height=26, corner_radius=8,
-                fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-                text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
-                command=self.add_image
-            ).pack(side="right")
-
-        self.img_scroll = ctk.CTkScrollableFrame(
-            card, height=90, orientation="horizontal",
-            fg_color=theme["card_alt"], corner_radius=10
-        )
-        self.img_scroll.pack(fill="x", padx=16, pady=(0, 12))
-
-        self.render_image_thumbnails()
-
-        # 4. Alt Butonlar (Kaydet / Sil / Kapat)
-        btn_bar = ctk.CTkFrame(card, fg_color="transparent")
-        btn_bar.pack(fill="x", padx=16, pady=(0, 12))
-
-        if self.is_today:
-            ctk.CTkButton(
-                btn_bar, text="💾 Kaydet", height=32, corner_radius=10,
+                btn_bar, text="💾 Sayfayı Kaydet", height=34, corner_radius=10,
                 fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                 text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
                 command=self.save_note
-            ).pack(side="left", fill="x", expand=True, padx=(0, 6))
+            ).pack(side="left", fill="x", expand=True, padx=(0, 8))
 
             if self.note_text or self.note_images:
                 ctk.CTkButton(
-                    btn_bar, text="🗑️ Notu Sil", height=32, corner_radius=10,
+                    btn_bar, text="🗑️ Notu Sil", height=34, corner_radius=10,
                     fg_color=theme.get("btn_danger", "#EF4444"), hover_color=theme.get("btn_danger_hover", "#DC2626"),
                     text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
                     command=self.delete_note
-                ).pack(side="left", padx=(0, 6))
+                ).pack(side="left", padx=(0, 8))
 
             ctk.CTkButton(
-                btn_bar, text="İptal", height=32, width=80, corner_radius=10,
+                btn_bar, text="Kapat", height=34, width=80, corner_radius=10,
                 fg_color=theme["card_alt"], hover_color=theme["checkbox_border"],
                 text_color=theme["text"], font=ctk.CTkFont(size=11),
                 command=self.destroy
             ).pack(side="right")
         else:
             ctk.CTkButton(
-                btn_bar, text="Kapat", height=32, corner_radius=10,
+                btn_bar, text="Kapat", height=34, corner_radius=10,
                 fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                 text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
                 command=self.destroy
             ).pack(fill="x")
 
-    def render_image_thumbnails(self):
-        for widget in self.img_scroll.winfo_children():
+    def draw_spiral_rings(self):
+        """Sol kenardaki gerçekçi spiral tel halkalarını çizer."""
+        self.spiral_canvas.delete("all")
+        h = 650
+        num_rings = 14
+        step = h / (num_rings + 1)
+
+        ring_color = "#A3978C" if not self.is_dark else "#6E6258"
+        ring_highlight = "#FAF4EB" if not self.is_dark else "#8C7E72"
+        hole_color = "#42362C" if not self.is_dark else "#120E0C"
+
+        for i in range(1, num_rings + 1):
+            cy = i * step
+            # Delik (Punch Hole)
+            self.spiral_canvas.create_oval(14, cy - 4, 24, cy + 4, fill=hole_color, outline="")
+            # Spiral Tel Halkası (Metal Ring Loop)
+            self.spiral_canvas.create_arc(2, cy - 8, 28, cy + 8, start=80, extent=200, style="arc",
+                                          outline=ring_color, width=2.5)
+            self.spiral_canvas.create_arc(3, cy - 7, 27, cy + 7, start=120, extent=120, style="arc",
+                                          outline=ring_highlight, width=1.0)
+
+    def render_polaroid_gallery(self):
+        """Açılı (yamuk) polaroid fotoğrafları defter üzerine yerleştirir."""
+        for widget in self.photo_scroll.winfo_children():
             widget.destroy()
 
         valid_images = [p for p in self.note_images if os.path.exists(p)]
         self.note_images = valid_images
 
         if not self.note_images:
-            empty_msg = "Henüz fotoğraf eklenmemiş." if not self.is_today else "Henüz fotoğraf eklenmedi. '+ Fotoğraf Ekle' ile ekleyebilirsiniz."
+            empty_msg = "Henüz fotoğraf eklenmemiş." if not self.is_today else "📌 Üstteki '📷 + Fotoğraf İğnele' butonuyla deftere polaroid fotoğraflar ekleyebilirsiniz."
             ctk.CTkLabel(
-                self.img_scroll, text=empty_msg,
+                self.photo_scroll, text=empty_msg,
                 font=ctk.CTkFont(size=10, slant="italic"),
                 text_color=self.theme["text_secondary"]
-            ).pack(padx=10, pady=25)
+            ).pack(padx=14, pady=35)
             return
 
-        self._thumb_refs = []
+        self._polaroid_refs = []
         for idx, img_path in enumerate(self.note_images):
             try:
-                pil_img = Image.open(img_path)
-                pil_img.thumbnail((70, 70), Image.Resampling.LANCZOS)
-                ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=pil_img.size)
-                self._thumb_refs.append(ctk_img)
+                angle = self._ANGLES[idx % len(self._ANGLES)]
+                polaroid_img = create_tilted_polaroid(img_path, width=120, height=90, angle=angle)
+                if not polaroid_img:
+                    continue
 
-                thumb_card = ctk.CTkFrame(self.img_scroll, fg_color=self.theme["card"], corner_radius=8,
-                                          border_width=1, border_color=self.theme["entry_border"])
-                thumb_card.pack(side="left", padx=5, pady=4)
+                ctk_img = ctk.CTkImage(light_image=polaroid_img, dark_image=polaroid_img, size=polaroid_img.size)
+                self._polaroid_refs.append(ctk_img)
+
+                card = ctk.CTkFrame(self.photo_scroll, fg_color="transparent")
+                card.pack(side="left", padx=6, pady=4)
 
                 btn_img = ctk.CTkButton(
-                    thumb_card, text="", image=ctk_img, width=72, height=72,
+                    card, text="", image=ctk_img,
                     fg_color="transparent", hover_color=self.theme["btn_primary_hover"],
-                    corner_radius=6,
+                    corner_radius=8,
                     command=lambda p=img_path: self.open_full_image(p)
                 )
-                btn_img.pack(padx=2, pady=2)
+                btn_img.pack()
 
                 if self.is_today:
                     btn_del = ctk.CTkButton(
-                        thumb_card, text="✕", width=18, height=18, corner_radius=9,
+                        card, text="✕", width=18, height=18, corner_radius=9,
                         fg_color=self.theme.get("btn_danger", "#EF4444"), hover_color=self.theme.get("btn_danger_hover", "#DC2626"),
                         text_color="#FFFFFF", font=ctk.CTkFont(size=9, weight="bold"),
                         command=lambda i=idx: self.remove_image(i)
                     )
-                    btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
+                    btn_del.place(relx=1.0, rely=0.0, anchor="ne", x=0, y=0)
             except Exception as e:
-                print(f"Resim thumbnail yüklenemedi: {e}")
+                print(f"Polaroid fotoğraf yüklenemedi: {e}")
+
+    def add_image(self):
+        files = filedialog.askopenfilenames(
+            title="Fotoğraf Seç (Deftere İğnele)",
+            filetypes=[("Resim Dosyaları", "*.png *.jpg *.jpeg *.webp *.bmp *.gif")]
+        )
+        if not files:
+            return
+        os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
+        import shutil
+        for f in files:
+            try:
+                ext = os.path.splitext(f)[1]
+                unique_name = f"{self.ds}_{int(time.time()*1000)}_{random.randint(100,999)}{ext}"
+                dest_path = os.path.join(NOTES_MEDIA_DIR, unique_name)
+                shutil.copy2(f, dest_path)
+                self.note_images.append(dest_path)
+            except Exception as e:
+                print(f"Fotoğraf kopyalanamadı: {e}")
+        self.render_polaroid_gallery()
+
+    def remove_image(self, index):
+        if 0 <= index < len(self.note_images):
+            self.note_images.pop(index)
+            self.render_polaroid_gallery()
+
+    def open_full_image(self, img_path):
+        if os.path.exists(img_path):
+            try:
+                os.startfile(img_path)
+            except Exception:
+                webbrowser.open(img_path)
+
+    def save_note(self):
+        text = self.textbox.get("1.0", "end-1c").strip()
+        if text or self.note_images:
+            self.parent.daily_notes[self.ds] = {
+                "text": text,
+                "images": self.note_images
+            }
+        else:
+            self.parent.daily_notes.pop(self.ds, None)
+
+        self.parent.save_data()
+        self.parent.render_table()
+        play_notification_sound()
+        self.destroy()
+
+    def delete_note(self):
+        self.parent.daily_notes.pop(self.ds, None)
+        self.parent.save_data()
+        self.parent.render_table()
+        play_button_sound()
+        self.destroy()
 
     def add_image(self):
         files = filedialog.askopenfilenames(
