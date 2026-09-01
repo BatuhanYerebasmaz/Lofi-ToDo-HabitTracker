@@ -10,7 +10,7 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 * **⭐ Seviye & XP İlerleme Barı:** Başlığın yanında canlı seviye göstergesi ve dinamik XP çubuğu.
 * **🌟 XP Kazanma Mekanikleri:**
   * Her tamamlanan standart görev: `+15 XP`
-  * Sayaçlı görevler: Toplam 15 XP adım sayısına orantılı bölünür; her adımda payını verir ve hedefe ulaşıldığında kalanla birlikte tam `+15 XP` tamamlanır (Örn: 5 adımlık görevde adım başı `+3 XP`, 8 adımlık görevde adım başı `+1 XP` ve bitişte kalan `+8 XP`).
+  * Sayaçlı görevler: Toplam 15 XP adım sayısına orantılı bölünür (`(adım * 15) // hedef`); her adımda payını verir ve hedefe ulaşıldığında kalanla birlikte tam `+15 XP` tamamlanır (Örn: 20 sayfalık kitapta 10. sayfada `7 XP`, 14. sayfada `10 XP`, bitişte tam `15 XP`).
   * Günlük %100 tamamlama: `+50 Bonus XP`
 * **🏆 Seviye Skalası:**
   * **Lvl 1:** 🐣 Çaylak Başlangıç (0 - 49 XP)
@@ -19,13 +19,13 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
   * **Lvl 4:** 🛡️ Disiplin Savaşçısı (200 - 299 XP)
   * **Lvl 5+:** 👑 Odak Efendisi (300+ XP)
 * **🔥 Günlük Seri (Streak):** Düzenli tamamlanan ardışık gün sayısı takibi.
-* **🛡️ Zincir Koruma Kalkanı (Streak Freeze):** Haftalık 1 kalkan hakkı ile 1 günlük aksamalarda serinizi kırmadan koruma.
+* **🛡️ Zincir Koruma Kalkanı (Streak Freeze):** Haftalık 1 kalkan hakkı ile 1 günlük aksamalarda veya ertesi sabah başlandığında serinizi kırmadan akıllı koruma.
 * **🎉 Günün Zaferi Kutlaması:** Günlük tüm görevler (%100) bittiğinde özel zafer penceresi ve kutlama sesi.
 
 ---
 
 ### 🔢 2. Sayaçlı Alışkanlıklar (Counter Habits)
-* **🎯 Sayısal Hedef Belirleme:** Ayarlar'dan görev eklerken isteğe bağlı hedef sayaç belirleme (Örn: *8 Bardak Su*, *20 Sayfa Kitap*, *100 Şınav*).
+* **🎯 Sayısal Hedef Belirleme:** Ayarlar'dan görev eklerken isteğe bağlı hedef sayaç belirleme (Örn: *8 Bardak Su*, *20 Sayfa Kitap*, *100 Şınav*). `Enter` tuşuyla anında ekleme.
 * **🖱️ Çift Yönlü Akıllı Tıklama:**
   * **Sol Tık:** Sayacı `+1` artırır (`0/8 ➔ 1/8 ➔ ... ➔ ✓8`).
   * **Sağ Tık:** Sayacı `-1` azaltır (`8/8 ➔ 7/8 ➔ ... ➔ 0/8`), normal görevlerde ise işareti kaldırır.
@@ -45,7 +45,7 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
 ### 📅 4. Aylık Takip Tablosu & Minimalist Gezinme
 * **🎨 Pastel Aylık Matris Tablosu:** Ayın tüm günlerini (1-31) tek ekranda ultra-hızlı ve yumuşak pastel renklerle gösterir.
 * **⚡ Günlük Moral & Efektiflik Takibi:** Her gün için 1-5 arası moral ve verimlilik puanlaması.
-* **💊 Minimalist Ay Gezinme Kapsülü:** Tablonun hemen altındaki zarif kapsülle geçmiş ve gelecek ayların kayıtları arasında hızlıca gezinme;
+* **💊 Minimalist Ay Gezinme Kapsülü:** Tablonun hemen altındaki zarif kapsülle geçmiş ve gelecek ayların kayıtları arasında hızlıca gezinme; ay adına tıklandığında anında geçerli aya geri dönme.
 
 ---
 
@@ -54,7 +54,7 @@ Modern, estetik, oyunlaştırılmış ve yapay zeka destekli masaüstü görev v
   * **Google Gemini API (Ücretsiz):** Google AI Studio API anahtarıyla buluttan ışık hızında çalışan `Google Gemini 1.5 Flash (API Key Gerekli - Ücretsiz)` ve `Google Gemini 2.0 Flash (API Key Gerekli - Yeni)` modelleri.
   * **⚡ Canlı API Bağlantı Testi:** Ayarlar penceresinden `⚡ Test Et` butonuna basarak Google Gemini bağlantınızı anında doğrulama.
   * **Dahili Yerel Motor:** Harici hiçbir kurulum gerektirmeyen hazır çevrimdışı motor.
-  * **Ollama & LM Studio:** Kendi bilgisayarınızdaki yerel açık kaynak modeller
+  * **Ollama & LM Studio:** Kendi bilgisayarınızdaki yerel açık kaynak modeller.
 * **🎭 Farklı Kişilik Modları:** *Sert & Direkt*, *Alaycı & Esprili*, *Motivasyonel* ve *Özel Prompt*.
 * **⏰ Akıllı Zamanlama:** Görevler için rastgele aralıklarla bağımsız bildirimler ve 30 saniyelik otomatik erteleme mekanizması.
 * **⚠️ Otantik Windows Hata Penceresi:** Bildirimler 3 kez ertelendiğinde gerçek sistem hata diyalogu hissi veren dinamik arayüz.
