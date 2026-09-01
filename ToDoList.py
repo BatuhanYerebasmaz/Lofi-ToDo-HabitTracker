@@ -196,36 +196,31 @@ SOUND_OPTIONS = {
 
 
 class SoundEngine:
-    """Windows yerel C motoru ve RAM tamponuyla çalışan, sıfır gecikmeli ses motoru."""
-    _CACHE = {}
+    """16 kanallı, üst üste basıldığında kesilmeyen polifonik sıfır gecikmeli Windows ses motoru."""
+    _channel_index = 0
+    _NUM_CHANNELS = 16
+    _channel_files = {}
+    _lock = threading.Lock()
     _INITIALIZED = False
-    SND_ASYNC = 0x0001
-    SND_NODEFAULT = 0x0002
-    SND_MEMORY = 0x0004
 
     @classmethod
     def init_engine(cls):
-        """Uygulama açılışında sesleri RAM'e yükler ve Windows ses sürücüsünü ısıtır (ilk tıklama kaybını önler)."""
+        """Uygulama açılışında ses motorunu ve Windows ses sürücüsünü ısıtır."""
         if cls._INITIALIZED:
             return
         cls._INITIALIZED = True
 
         def _warmup():
             try:
-                if not os.path.exists(SOUNDS_DIR):
-                    return
-                for f in os.listdir(SOUNDS_DIR):
-                    if f.endswith(".wav"):
-                        p = os.path.join(SOUNDS_DIR, f)
-                        try:
-                            with open(p, "rb") as fp:
-                                cls._CACHE[f] = fp.read()
-                        except Exception:
-                            pass
-                # Windows ses kanalını uyandır ve hazırda beklet
-                if "tactile_pop.wav" in cls._CACHE:
-                    ctypes.windll.winmm.PlaySoundA(cls._CACHE["tactile_pop.wav"], None, cls.SND_ASYNC | cls.SND_NODEFAULT | cls.SND_MEMORY)
-                    ctypes.windll.winmm.PlaySoundA(None, None, 0)
+                p = os.path.join(SOUNDS_DIR, "tactile_pop.wav").replace("\\", "/")
+                if os.path.exists(p):
+                    winmm = ctypes.windll.winmm
+                    winmm.mciSendStringW(f'open "{p}" type waveaudio alias snd_poly_0', None, 0, 0)
+                    cls._channel_files["snd_poly_0"] = p
+                    winmm.mciSendStringW("play snd_poly_0 from 0", None, 0, 0)
+                    import time
+                    time.sleep(0.01)
+                    winmm.mciSendStringW("stop snd_poly_0", None, 0, 0)
             except Exception:
                 pass
 
@@ -235,19 +230,22 @@ class SoundEngine:
     def play(cls, file_name):
         if not file_name:
             return
-        buf = cls._CACHE.get(file_name)
-        if not buf:
-            file_path = os.path.join(SOUNDS_DIR, file_name)
-            if not os.path.exists(file_path):
-                return
-            try:
-                with open(file_path, "rb") as fp:
-                    buf = fp.read()
-                    cls._CACHE[file_name] = buf
-            except Exception:
-                return
+        file_path = os.path.join(SOUNDS_DIR, file_name).replace("\\", "/")
+        if not os.path.exists(file_path):
+            return
+
+        with cls._lock:
+            cls._channel_index = (cls._channel_index + 1) % cls._NUM_CHANNELS
+            ch = f"snd_poly_{cls._channel_index}"
+
         try:
-            ctypes.windll.winmm.PlaySoundA(buf, None, cls.SND_ASYNC | cls.SND_NODEFAULT | cls.SND_MEMORY)
+            winmm = ctypes.windll.winmm
+            if cls._channel_files.get(ch) != file_path:
+                winmm.mciSendStringW(f"close {ch}", None, 0, 0)
+                winmm.mciSendStringW(f'open "{file_path}" type waveaudio alias {ch}', None, 0, 0)
+                cls._channel_files[ch] = file_path
+
+            winmm.mciSendStringW(f"play {ch} from 0", None, 0, 0)
         except Exception:
             pass
 
