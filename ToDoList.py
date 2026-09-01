@@ -1521,9 +1521,7 @@ class GlobalHotkeyManager:
 #  KAYAN MİNİ WİDGET (STICKY MODE - ALWAYS ON TOP)
 # ============================================================
 class StickyWidget(ctk.CTkToplevel):
-    """Her zaman üstte duran, pürüzsüz yuvarlak köşeli, sürüklenebilir kompakt lofi mini görev widget'ı."""
-    TRANS_COLOR = "#000001"
-
+    """Her zaman üstte duran, Windows DWM donanımsal yuvarlak köşeli, kompakt lofi mini görev widget'ı."""
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
@@ -1531,12 +1529,8 @@ class StickyWidget(ctk.CTkToplevel):
         self.overrideredirect(True)
         self.attributes("-topmost", True)
 
-        # Windows'ta köşeli beyaz çıkıntıları yok edip gerçek yuvarlak pencere yapmak için saydam renk
-        try:
-            self.wm_attributes("-transparentcolor", self.TRANS_COLOR)
-        except Exception:
-            pass
-        self.configure(fg_color=self.TRANS_COLOR)
+        theme = self.parent.get_theme()
+        self.configure(fg_color=theme["card"])
 
         screen_w = self.winfo_screenwidth()
         x = self.parent.settings.get("sticky_x", screen_w - 280)
@@ -1548,25 +1542,43 @@ class StickyWidget(ctk.CTkToplevel):
 
         self.setup_ui()
         self.bind_events()
+        self.after(50, self.apply_dwm_rounding)
+
+    def apply_dwm_rounding(self):
+        """Windows 11 DWM donanımsal pürüzsüz yuvarlak köşe ve gölge uygular."""
+        try:
+            self.update_idletasks()
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+            if not hwnd:
+                hwnd = self.winfo_id()
+            DWMWA_WINDOW_CORNER_PREFERENCE = 33
+            DWMWCP_ROUND = 2
+            val = ctypes.c_int(DWMWCP_ROUND)
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(val), ctypes.sizeof(val)
+            )
+        except Exception:
+            pass
 
     def setup_ui(self):
         theme = self.parent.get_theme()
 
-        # Dış Yuvarlak Kart (Köşeleri saydam arka planda mükemmel yuvarlak görünür)
+        # Dış Kart (Piksel bozulması olmadan tam doldurur)
         self.card = ctk.CTkFrame(
-            self, fg_color=theme["card"], corner_radius=16,
+            self, fg_color=theme["card"], corner_radius=12,
             border_width=1.5, border_color=theme.get("accent", "#7C3AED")
         )
-        self.card.pack(fill="both", expand=True, padx=4, pady=4)
+        self.card.pack(fill="both", expand=True, padx=1, pady=1)
 
         # Başlık Çubuğu (Sürüklenebilir)
-        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=34, corner_radius=12)
+        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=36, corner_radius=10)
         self.header.pack(fill="x", padx=6, pady=(6, 4))
         self.header.pack_propagate(False)
 
         # Başlık İkon & Metin
         self.title_lbl = ctk.CTkLabel(
-            self.header, text="📌 Bugün", font=ctk.CTkFont(size=11, weight="bold"),
+            self.header, text="📌 Bugün",
+            font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             text_color=theme["text"]
         )
         self.title_lbl.pack(side="left", padx=(10, 4))
@@ -1577,25 +1589,28 @@ class StickyWidget(ctk.CTkToplevel):
         self.progress_frame.pack(side="left", padx=4)
 
         self.progress_lbl = ctk.CTkLabel(
-            self.progress_frame, text=f"{done}/{total}", font=ctk.CTkFont(size=10, weight="bold"),
+            self.progress_frame, text=f"{done}/{total}",
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
             text_color=theme.get("accent", "#FB7185")
         )
         self.progress_lbl.pack(padx=6, pady=1)
 
         # Kapat / Gizle Butonu
         self.close_btn = ctk.CTkButton(
-            self.header, text="✕", width=22, height=22,
+            self.header, text="✕", width=24, height=24,
             fg_color="transparent", hover_color=theme["btn_danger"],
-            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text"], corner_radius=12,
+            font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
             command=self.hide_widget
         )
         self.close_btn.pack(side="right", padx=(2, 6))
 
-        # Ana Pencereyi Aç / Büyüt Butonu
+        # Ana Pencereyi Aç / Büyüt Butonu (↗)
         self.expand_btn = ctk.CTkButton(
-            self.header, text="📂", width=22, height=22,
+            self.header, text="↗", width=24, height=24,
             fg_color="transparent", hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10),
+            text_color=theme["text"], corner_radius=12,
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             command=self.restore_main_window
         )
         self.expand_btn.pack(side="right", padx=2)
@@ -1625,7 +1640,7 @@ class StickyWidget(ctk.CTkToplevel):
         if not self.parent.tasks:
             ctk.CTkLabel(
                 self.scroll_frame, text="Henüz görev eklenmemiş",
-                font=ctk.CTkFont(size=11), text_color=theme["text_secondary"]
+                font=ctk.CTkFont(family="Segoe UI", size=11), text_color=theme["text_secondary"]
             ).pack(pady=25)
             return
 
@@ -1646,7 +1661,7 @@ class StickyWidget(ctk.CTkToplevel):
                     row, text=badge_text, width=42, height=22,
                     fg_color=badge_color, hover_color=theme["btn_primary_hover"],
                     text_color="#FFFFFF" if is_done else theme["text"],
-                    corner_radius=6, font=ctk.CTkFont(size=9, weight="bold"),
+                    corner_radius=6, font=ctk.CTkFont(family="Segoe UI", size=9, weight="bold"),
                     command=lambda t=task: self.on_task_click(t)
                 )
                 cnt_btn.pack(side="left", padx=(6, 4))
@@ -1659,7 +1674,8 @@ class StickyWidget(ctk.CTkToplevel):
                     row, text=chk_text, width=22, height=22,
                     fg_color=chk_color, hover_color=theme["btn_primary_hover"],
                     border_width=1.5, border_color=border_col,
-                    text_color="#FFFFFF", corner_radius=6, font=ctk.CTkFont(size=11, weight="bold"),
+                    text_color="#FFFFFF", corner_radius=6,
+                    font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
                     command=lambda t=task: self.on_task_click(t)
                 )
                 chk_btn.pack(side="left", padx=(6, 4))
@@ -1668,7 +1684,7 @@ class StickyWidget(ctk.CTkToplevel):
             # Görev Adı
             lbl = ctk.CTkLabel(
                 row, text=task, anchor="w",
-                font=ctk.CTkFont(size=10, overstrike=is_done),
+                font=ctk.CTkFont(family="Segoe UI", size=10, overstrike=is_done),
                 text_color=theme["text_secondary"] if is_done else theme["text"]
             )
             lbl.pack(side="left", fill="x", expand=True, padx=(2, 6))
@@ -1705,11 +1721,7 @@ class StickyWidget(ctk.CTkToplevel):
 
     def apply_theme(self):
         theme = self.parent.get_theme()
-        try:
-            self.wm_attributes("-transparentcolor", self.TRANS_COLOR)
-        except Exception:
-            pass
-        self.configure(fg_color=self.TRANS_COLOR)
+        self.configure(fg_color=theme["card"])
         self.card.configure(fg_color=theme["card"], border_color=theme.get("accent", "#7C3AED"))
         self.header.configure(fg_color=theme["card_alt"])
         self.progress_frame.configure(fg_color=theme["card"])
@@ -1722,6 +1734,7 @@ class StickyWidget(ctk.CTkToplevel):
             scrollbar_button_hover_color=theme["btn_primary_hover"]
         )
         self.render_tasks()
+        self.apply_dwm_rounding()
 
     def bind_events(self):
         for w in (self.header, self.title_lbl, self.progress_lbl, self.progress_frame):
@@ -1751,6 +1764,7 @@ class StickyWidget(ctk.CTkToplevel):
         self.deiconify()
         self.lift()
         self.render_tasks()
+        self.apply_dwm_rounding()
 
     def restore_main_window(self):
         play_button_sound()
