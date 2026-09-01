@@ -2380,6 +2380,24 @@ class HabitTrackerApp(ctk.CTk):
                 total_xp += 50
         return max(0, total_xp)
 
+    def calculate_streak(self):
+        """Bugünden veya dünden geriye doğru kesintisiz görev yapılan ardışık gün serisini hesaplar."""
+        streak = 0
+        cur_d = self.today
+        today_done = sum(1 for t in self.tasks if self.get_task_state(cur_d, t)) if self.tasks else 0
+        if today_done == 0:
+            cur_d = self.today - datetime.timedelta(days=1)
+
+        while True:
+            ds = cur_d.strftime("%Y-%m-%d")
+            has_done = any(self.get_task_state(cur_d, t) for t in self.tasks) if self.tasks else False
+            if has_done:
+                streak += 1
+                cur_d -= datetime.timedelta(days=1)
+            else:
+                break
+        return streak
+
     def get_level_data(self):
         xp = self.calculate_total_xp()
         return get_level_info(xp)
@@ -2477,7 +2495,16 @@ class HabitTrackerApp(ctk.CTk):
             self.level_badge_lbl.configure(text_color=theme.get("accent", "#FB7185"))
             self.xp_bar.configure(fg_color=theme["progress_bg"], progress_color=theme.get("moral_color", "#D98A48"))
             self.xp_label.configure(text_color=theme["text_secondary"])
-            self.shield_lbl.configure(text_color=theme.get("efektiflik_color", "#957DC7"))
+
+            if hasattr(self, "streak_badge"):
+                self.streak_badge.configure(fg_color=theme["card_alt"])
+                self.streak_lbl.configure(text_color=theme.get("accent", "#FB7185"))
+
+                self.shield_badge.configure(fg_color=theme["card_alt"])
+                self.shield_lbl.configure(text_color=theme.get("efektiflik_color", "#957DC7"))
+
+                self.total_xp_badge.configure(fg_color=theme["card_alt"])
+                self.total_xp_lbl.configure(text_color=theme.get("moral_color", "#D98A48"))
 
         # Mode switch
         self.mode_switch.configure(
@@ -2539,7 +2566,7 @@ class HabitTrackerApp(ctk.CTk):
 
         # XP & Level Gamification Frame (Genişletilmiş Seviye Barı)
         self.level_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.level_frame.pack(side="left", padx=(30, 0))
+        self.level_frame.pack(side="left", padx=(24, 0))
 
         self.level_badge_lbl = ctk.CTkLabel(
             self.level_frame, text="⭐ Lvl 1: Çaylak",
@@ -2549,7 +2576,7 @@ class HabitTrackerApp(ctk.CTk):
         self.level_badge_lbl.pack(side="left", padx=(0, 10))
 
         self.xp_bar = ctk.CTkProgressBar(
-            self.level_frame, width=250, height=13,
+            self.level_frame, width=320, height=13,
             corner_radius=7,
             fg_color=theme["progress_bg"],
             progress_color=theme.get("moral_color", "#D98A48")
@@ -2562,17 +2589,41 @@ class HabitTrackerApp(ctk.CTk):
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme["text_secondary"]
         )
-        self.xp_label.pack(side="left", padx=(0, 14))
+        self.xp_label.pack(side="left", padx=(0, 12))
 
-        # Shield Badge
-        self.shield_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        self.shield_frame.pack(side="left", padx=(4, 0))
+        # Rozetler ve İstatistikler Grubu
+        self.stats_frame = ctk.CTkFrame(self.header_frame, fg_color="transparent")
+        self.stats_frame.pack(side="left", padx=(8, 0))
+
+        # 1. Seri (Streak)
+        self.streak_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
+        self.streak_badge.pack(side="left", padx=(0, 6))
+        self.streak_lbl = ctk.CTkLabel(
+            self.streak_badge, text="🔥 0 Gün Seri",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.get("accent", "#FB7185")
+        )
+        self.streak_lbl.pack(padx=8, pady=3)
+
+        # 2. Kalkan (Shield)
+        self.shield_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
+        self.shield_badge.pack(side="left", padx=(0, 6))
         self.shield_lbl = ctk.CTkLabel(
-            self.shield_frame, text="🛡️ 1 Kalkan",
+            self.shield_badge, text="🛡️ 1 Kalkan",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color=theme.get("efektiflik_color", "#957DC7")
         )
-        self.shield_lbl.pack(side="left")
+        self.shield_lbl.pack(padx=8, pady=3)
+
+        # 3. Toplam XP
+        self.total_xp_badge = ctk.CTkFrame(self.stats_frame, fg_color=theme["card_alt"], corner_radius=8)
+        self.total_xp_badge.pack(side="left")
+        self.total_xp_lbl = ctk.CTkLabel(
+            self.total_xp_badge, text="✨ 0 XP",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color=theme.get("moral_color", "#D98A48")
+        )
+        self.total_xp_lbl.pack(padx=8, pady=3)
 
         # Sağ üst
         self.right_header = ctk.CTkFrame(self.header_frame, fg_color="transparent")
@@ -2741,8 +2792,17 @@ class HabitTrackerApp(ctk.CTk):
             self.level_badge_lbl.configure(text=f"{lvl_info['icon']} Lvl {lvl_info['level']}: {lvl_info['title']}")
             self.xp_bar.set(lvl_info["ratio"])
             self.xp_label.configure(text=f"{lvl_info['current_xp']}/{lvl_info['next_xp']} XP")
-            freezes = self.settings.get("streak_freezes", 1)
-            self.shield_lbl.configure(text=f"🛡️ {freezes} Kalkan" if freezes > 0 else "🛡️ Kalkan Yok")
+
+            if hasattr(self, "streak_lbl"):
+                streak_days = self.calculate_streak()
+                self.streak_lbl.configure(text=f"🔥 {streak_days} Gün Seri" if streak_days > 0 else "🔥 0 Gün")
+
+            if hasattr(self, "shield_lbl"):
+                freezes = self.settings.get("streak_freezes", 1)
+                self.shield_lbl.configure(text=f"🛡️ {freezes} Kalkan" if freezes > 0 else "🛡️ Kalkan Yok")
+
+            if hasattr(self, "total_xp_lbl"):
+                self.total_xp_lbl.configure(text=f"✨ {lvl_info['total_xp']} XP")
 
     # ---------- ULTRA-HIZLI VE YUMUŞAK PASTEL AYLIK TABLO ----------
     def render_table(self):
