@@ -2268,15 +2268,24 @@ class SettingsWindow(ctk.CTkToplevel):
         m_row = ctk.CTkFrame(m_box, fg_color="transparent")
         m_row.pack(fill="x", padx=12, pady=(0, 10))
 
-        saved_models = self.parent.settings.get("detected_ai_models", [
+        guaranteed_models = [
             DEFAULT_AI_MODEL,
-        ])
-        cur_model = self.parent.settings.get("ai_model", DEFAULT_AI_MODEL)
-        if cur_model not in saved_models:
-            saved_models.append(cur_model)
+            "Google Gemini (1.5 Flash - Hızlı & Ücretsiz)",
+            "Google Gemini (2.0 Flash - Yeni)"
+        ]
+        saved_models = self.parent.settings.get("detected_ai_models", [])
+        combined_models = list(guaranteed_models)
+        for sm in saved_models:
+            if sm not in combined_models:
+                combined_models.append(sm)
 
+        cur_model = self.parent.settings.get("ai_model", DEFAULT_AI_MODEL)
+        if cur_model not in combined_models:
+            combined_models.append(cur_model)
+
+        self.parent.settings["detected_ai_models"] = combined_models
         self.model_var = ctk.StringVar(value=cur_model)
-        self.model_menu = ctk.CTkOptionMenu(m_row, variable=self.model_var, values=saved_models,
+        self.model_menu = ctk.CTkOptionMenu(m_row, variable=self.model_var, values=combined_models,
                                             width=260, height=28, corner_radius=8,
                                             fg_color=theme["entry_bg"], button_color=theme["btn_primary"],
                                             button_hover_color=theme["btn_primary_hover"],
