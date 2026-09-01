@@ -2673,9 +2673,9 @@ class HabitTrackerApp(ctk.CTk):
         chart1_header.pack(fill="x", padx=8, pady=(6, 2))
 
         self.chart1_prev_btn = ctk.CTkButton(
-            chart1_header, text="◀", width=28, height=22,
+            chart1_header, text="‹", width=28, height=22,
             fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=14, weight="bold"),
             command=lambda: self.navigate_week(-1))
         self.chart1_prev_btn.pack(side="left")
 
@@ -2685,9 +2685,9 @@ class HabitTrackerApp(ctk.CTk):
         self.chart1_title_lbl.pack(side="left", expand=True)
 
         self.chart1_next_btn = ctk.CTkButton(
-            chart1_header, text="▶", width=28, height=22,
+            chart1_header, text="›", width=28, height=22,
             fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=14, weight="bold"),
             command=lambda: self.navigate_week(1))
         self.chart1_next_btn.pack(side="right")
 
@@ -2699,9 +2699,9 @@ class HabitTrackerApp(ctk.CTk):
         chart2_header.pack(fill="x", padx=8, pady=(6, 2))
 
         self.chart2_prev_btn = ctk.CTkButton(
-            chart2_header, text="◀", width=28, height=22,
+            chart2_header, text="‹", width=28, height=22,
             fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=14, weight="bold"),
             command=lambda: self.navigate_month(-1))
         self.chart2_prev_btn.pack(side="left")
 
@@ -2711,9 +2711,9 @@ class HabitTrackerApp(ctk.CTk):
         self.chart2_title_lbl.pack(side="left", expand=True)
 
         self.chart2_next_btn = ctk.CTkButton(
-            chart2_header, text="▶", width=28, height=22,
+            chart2_header, text="›", width=28, height=22,
             fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=10, weight="bold"),
+            text_color=theme["text"], corner_radius=11, font=ctk.CTkFont(size=14, weight="bold"),
             command=lambda: self.navigate_month(1))
         self.chart2_next_btn.pack(side="right")
 
