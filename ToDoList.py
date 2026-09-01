@@ -1521,7 +1521,7 @@ class GlobalHotkeyManager:
 #  KAYAN MİNİ WİDGET (STICKY MODE - ALWAYS ON TOP)
 # ============================================================
 class StickyWidget(ctk.CTkToplevel):
-    """Her zaman üstte duran, pürüzsüz yuvarlak köşeli ve kompakt lofi mini görev widget'ı."""
+    """Her zaman üstte duran, Spotlight/Raycast tarzı keskin estetik çerçeveli, içi yuvarlak kapsüllü lofi mini widget."""
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
@@ -1542,40 +1542,20 @@ class StickyWidget(ctk.CTkToplevel):
 
         self.setup_ui()
         self.bind_events()
-        self.after(20, self.apply_round_corners)
-
-    def apply_round_corners(self):
-        """Windows SetWindowRgn ile pencereyi pürüzsüz yuvarlak keser (0 taşma, 0 sızıntı)."""
-        try:
-            self.update_idletasks()
-            w = self.winfo_width()
-            h = self.winfo_height()
-            if w <= 10 or h <= 10:
-                w, h = 260, 340
-            r = 32  # 16px köşe yarıçapı
-            hwnd_child = self.winfo_id()
-            rgn1 = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, r, r)
-            ctypes.windll.user32.SetWindowRgn(hwnd_child, rgn1, True)
-
-            hwnd_parent = ctypes.windll.user32.GetParent(hwnd_child)
-            if hwnd_parent:
-                rgn2 = ctypes.windll.gdi32.CreateRoundRectRgn(0, 0, w + 1, h + 1, r, r)
-                ctypes.windll.user32.SetWindowRgn(hwnd_parent, rgn2, True)
-        except Exception:
-            pass
 
     def setup_ui(self):
         theme = self.parent.get_theme()
+        border_col = theme.get("accent", "#7C3AED")
 
-        # Dış Kart (Pencereye tam oturur, köşeler yuvarlak kesilir)
+        # Dış Kart (Spotlight/VS Code tarzı cam gibi keskin 1px estetik çerçeve)
         self.card = ctk.CTkFrame(
-            self, fg_color=theme["card"], corner_radius=16,
-            border_width=1.5, border_color=theme.get("accent", "#7C3AED")
+            self, fg_color=theme["card"], corner_radius=0,
+            border_width=1.5, border_color=border_col
         )
         self.card.pack(fill="both", expand=True, padx=0, pady=0)
 
-        # Başlık Çubuğu (Sürüklenebilir)
-        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=36, corner_radius=12)
+        # Başlık Çubuğu (Sürüklenebilir, içi yuvarlak kapsül)
+        self.header = ctk.CTkFrame(self.card, fg_color=theme["card_alt"], height=36, corner_radius=8)
         self.header.pack(fill="x", padx=6, pady=(6, 4))
         self.header.pack_propagate(False)
 
@@ -1603,7 +1583,7 @@ class StickyWidget(ctk.CTkToplevel):
         self.close_btn = ctk.CTkButton(
             self.header, text="✕", width=24, height=24,
             fg_color="transparent", hover_color=theme["btn_danger"],
-            text_color=theme["text"], corner_radius=12,
+            text_color=theme["text"], corner_radius=6,
             font=ctk.CTkFont(family="Segoe UI", size=10, weight="bold"),
             command=self.hide_widget
         )
@@ -1613,7 +1593,7 @@ class StickyWidget(ctk.CTkToplevel):
         self.expand_btn = ctk.CTkButton(
             self.header, text="↗", width=24, height=24,
             fg_color="transparent", hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], corner_radius=12,
+            text_color=theme["text"], corner_radius=6,
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             command=self.restore_main_window
         )
@@ -1725,8 +1705,9 @@ class StickyWidget(ctk.CTkToplevel):
 
     def apply_theme(self):
         theme = self.parent.get_theme()
+        border_col = theme.get("accent", "#7C3AED")
         self.configure(fg_color=theme["card"])
-        self.card.configure(fg_color=theme["card"], border_color=theme.get("accent", "#7C3AED"))
+        self.card.configure(fg_color=theme["card"], border_color=border_col)
         self.header.configure(fg_color=theme["card_alt"])
         self.progress_frame.configure(fg_color=theme["card"])
         self.title_lbl.configure(text_color=theme["text"])
@@ -1738,7 +1719,6 @@ class StickyWidget(ctk.CTkToplevel):
             scrollbar_button_hover_color=theme["btn_primary_hover"]
         )
         self.render_tasks()
-        self.after(10, self.apply_round_corners)
 
     def bind_events(self):
         for w in (self.header, self.title_lbl, self.progress_lbl, self.progress_frame):
@@ -1768,7 +1748,6 @@ class StickyWidget(ctk.CTkToplevel):
         self.deiconify()
         self.lift()
         self.render_tasks()
-        self.after(10, self.apply_round_corners)
 
     def restore_main_window(self):
         play_button_sound()
