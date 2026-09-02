@@ -3248,14 +3248,7 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.parent.save_data()
         self.parent.render_table()
-    def destroy(self):
-        try:
-            self.canvas.unbind_all("<MouseWheel>")
-            self.canvas.unbind_all("<Button-4>")
-            self.canvas.unbind_all("<Button-5>")
-        except Exception:
-            pass
-        super().destroy()
+        self.destroy()
 
     def close_modal(self):
         play_button_sound()
@@ -3280,6 +3273,12 @@ class DailyNoteModal(ctk.CTkToplevel):
     def destroy(self):
         if DailyNoteModal.CURRENT_INSTANCE is self:
             DailyNoteModal.CURRENT_INSTANCE = None
+        try:
+            self.canvas.unbind_all("<MouseWheel>")
+            self.canvas.unbind_all("<Button-4>")
+            self.canvas.unbind_all("<Button-5>")
+        except Exception:
+            pass
         super().destroy()
 
 
