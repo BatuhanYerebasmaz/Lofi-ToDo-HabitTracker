@@ -2586,7 +2586,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 p_head, text="✕", width=22, height=22, corner_radius=11,
                 fg_color="transparent", hover_color=paper_border,
                 text_color=text_color, font=ctk.CTkFont(size=10, weight="bold"),
-                command=lambda: self._sticker_popup.place_forget()
+                command=lambda: (play_button_sound(), self._sticker_popup.place_forget())
             ).pack(side="right")
 
             scroll_stk = ctk.CTkScrollableFrame(self._sticker_popup, fg_color="transparent", height=200)
