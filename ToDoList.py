@@ -59,6 +59,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageDraw, ImageTk, ImageOps
 import datetime
 import calendar
+import math
 import json
 import random
 import threading
@@ -2152,6 +2153,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._polaroid_win_ids = []
         self._sticker_win_ids = []
         self._sticker_popup = None
+        self._active_hover_item = None
+        self._is_dragging_item = False
 
         self.setup_ui()
         self.after(5, self.apply_round_corners)
@@ -2309,13 +2312,32 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.txt_win_id = self.canvas.create_window(48, 16, anchor="nw", window=txt_container, width=515, height=initial_txt_h)
 
-        # Fare Tekerleği ile Senkronize Kaydırma
+        # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
         def _on_canvas_wheel(event):
+            target = getattr(self, "_active_hover_item", None)
+            if target and self.is_today:
+                item_type = target.get("type")
+                item_data = target.get("data")
+                is_up = (event.delta > 0 if event.delta else (getattr(event, "num", 0) == 4))
+                if item_type == "polaroid":
+                    cur_w = item_data.get("width", 140)
+                    new_w = min(340, max(75, cur_w + (12 if is_up else -12)))
+                    item_data["width"] = new_w
+                    self._save_state_quietly()
+                    self.render_canvas_polaroids()
+                elif item_type == "sticker":
+                    cur_sz = item_data.get("size", 75)
+                    new_sz = min(220, max(25, cur_sz + (8 if is_up else -8)))
+                    item_data["size"] = new_sz
+                    self._save_state_quietly()
+                    self.render_canvas_stickers()
+                return
+
             if event.delta:
                 self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            elif event.num == 4:
+            elif getattr(event, "num", 0) == 4:
                 self.canvas.yview_scroll(-1, "units")
-            elif event.num == 5:
+            elif getattr(event, "num", 0) == 5:
                 self.canvas.yview_scroll(1, "units")
 
         self.canvas.bind_all("<MouseWheel>", _on_canvas_wheel)
@@ -2503,6 +2525,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                                 self._stk_drag_start_x = event.x
                                 self._stk_drag_start_y = event.y
                                 self._stk_has_moved = False
+                                self._active_hover_item = {"type": "sticker", "data": cur_s}
+                                self._is_dragging_item = True
                                 self.canvas.tag_raise(t_name)
                                 self.canvas.tag_raise("stk_ctrl")
                                 self.canvas.config(cursor="fleur")
@@ -2521,20 +2545,28 @@ class DailyNoteModal(ctk.CTkToplevel):
                                 self._update_scroll_region()
 
                             def _end(event):
+                                self._is_dragging_item = False
                                 self.canvas.config(cursor="hand2")
                                 self._save_state_quietly()
 
                             def _enter(event):
+                                self._active_hover_item = {"type": "sticker", "data": cur_s}
                                 self.canvas.config(cursor="hand2")
                                 self._show_sticker_controls(cur_s, w_s, h_s)
 
-                            return _start, _drag, _end, _enter
+                            def _leave(event):
+                                if not getattr(self, "_is_dragging_item", False) and not getattr(self, "_is_rotating", False):
+                                    if getattr(self, "_active_hover_item", None) and self._active_hover_item.get("data") == cur_s:
+                                        self._active_hover_item = None
 
-                        st_cb, dr_cb, end_cb, enter_cb = _make_stk_drag(tag_name, s, sw, sh)
+                            return _start, _drag, _end, _enter, _leave
+
+                        st_cb, dr_cb, end_cb, enter_cb, leave_cb = _make_stk_drag(tag_name, s, sw, sh)
                         self.canvas.tag_bind(tag_name, "<Button-1>", st_cb)
                         self.canvas.tag_bind(tag_name, "<B1-Motion>", dr_cb)
                         self.canvas.tag_bind(tag_name, "<ButtonRelease-1>", end_cb)
                         self.canvas.tag_bind(tag_name, "<Enter>", enter_cb)
+                        self.canvas.tag_bind(tag_name, "<Leave>", leave_cb)
 
                 except Exception as e:
                     print(f"Sticker çizim hatası: {e}")
@@ -2553,7 +2585,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         cy = s.get("y", 200)
         hw = sw // 2 - 2
         hh = sh // 2 - 2
-        r = 9
+        r = 10
 
         # 1. Sağ Üst: Kırmızı Sil (✕)
         self.canvas.create_oval(cx + hw - r, cy - hh - r, cx + hw + r, cy - hh + r,
@@ -2561,7 +2593,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.canvas.create_text(cx + hw, cy - hh, text="✕", font=("Segoe UI", 7, "bold"),
                                 fill="#FFFFFF", tags=("stk_ctrl", "stk_del"))
 
-        # 2. Sol Üst: Mavi Döndür (🔄)
+        # 2. Sol Üst: Mavi Döndür (🔄 - Basılı Tutup Çevir)
         self.canvas.create_oval(cx - hw - r, cy - hh - r, cx - hw + r, cy - hh + r,
                                 fill="#3B82F6", outline="#2563EB", width=1, tags=("stk_ctrl", "stk_rot"))
         self.canvas.create_text(cx - hw, cy - hh, text="🔄", font=("Segoe UI", 6, "bold"),
@@ -2588,26 +2620,42 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         def _res_stk(delta, cur_s=s):
             play_button_sound()
-            cur_s["size"] = max(30, min(160, cur_s.get("size", 75) + delta))
+            cur_s["size"] = max(25, min(220, cur_s.get("size", 75) + delta))
             self._save_state_quietly()
             self.render_canvas_stickers()
 
-        def _rot_stk(cur_s=s):
-            play_button_sound()
-            cur_ang = cur_s.get("angle", 0) + 8
-            if cur_ang > 36:
-                cur_ang = -36
-            cur_s["angle"] = cur_ang
-            self._save_state_quietly()
+        # İnteraktif Slider/Dial Tarzı Döndürme (Basılı tutup fareyi hareket ettirerek canlı çevirme)
+        def _start_stk_rot(e, cur_s=s):
+            self._rot_start_mouse_angle = math.degrees(math.atan2(e.y - cy, e.x - cx))
+            self._rot_start_item_angle = cur_s.get("angle", 0)
+            self._is_rotating = True
+            self._active_hover_item = {"type": "sticker", "data": cur_s}
+            self.canvas.config(cursor="exchange")
+
+        def _drag_stk_rot(e, cur_s=s):
+            cur_mouse_angle = math.degrees(math.atan2(e.y - cy, e.x - cx))
+            delta = cur_mouse_angle - getattr(self, "_rot_start_mouse_angle", 0)
+            new_angle = (getattr(self, "_rot_start_item_angle", 0) + delta) % 360
+            if new_angle > 180:
+                new_angle -= 360
+            cur_s["angle"] = round(new_angle, 1)
             self.render_canvas_stickers()
+
+        def _end_stk_rot(e):
+            self._is_rotating = False
+            self.canvas.config(cursor="hand2")
+            self._save_state_quietly()
 
         self.canvas.tag_bind("stk_del", "<Button-1>", lambda e: _del_stk())
         self.canvas.tag_bind("stk_plus", "<Button-1>", lambda e: _res_stk(14))
         self.canvas.tag_bind("stk_minus", "<Button-1>", lambda e: _res_stk(-14))
-        self.canvas.tag_bind("stk_rot", "<Button-1>", lambda e: _rot_stk())
+
+        self.canvas.tag_bind("stk_rot", "<Button-1>", _start_stk_rot)
+        self.canvas.tag_bind("stk_rot", "<B1-Motion>", _drag_stk_rot)
+        self.canvas.tag_bind("stk_rot", "<ButtonRelease-1>", _end_stk_rot)
 
         for tag in ("stk_del", "stk_rot", "stk_plus", "stk_minus"):
-            self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
+            self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
     def _show_polaroid_controls(self, item, pw, ph):
         """Polaroid fotoğraf üzerine gelindiğinde mini kontrolleri çizer."""
@@ -2616,7 +2664,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         cy = item.get("y", 200)
         hw = pw // 2 - 14
         hh = ph // 2 - 14
-        r = 10
+        r = 11
 
         # 1. Sağ Üst: Kırmızı Sil (✕)
         self.canvas.create_oval(cx + hw - r, cy - hh - r, cx + hw + r, cy - hh + r,
@@ -2624,7 +2672,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.canvas.create_text(cx + hw, cy - hh, text="✕", font=("Segoe UI", 8, "bold"),
                                 fill="#FFFFFF", tags=("pol_ctrl", "pol_del"))
 
-        # 2. Sol Üst: Mavi Döndür (🔄)
+        # 2. Sol Üst: Mavi Döndür (🔄 - Basılı Tutup Çevir)
         self.canvas.create_oval(cx - hw - r, cy - hh - r, cx - hw + r, cy - hh + r,
                                 fill="#3B82F6", outline="#2563EB", width=1, tags=("pol_ctrl", "pol_rot"))
         self.canvas.create_text(cx - hw, cy - hh, text="🔄", font=("Segoe UI", 7, "bold"),
@@ -2647,29 +2695,45 @@ class DailyNoteModal(ctk.CTkToplevel):
             play_button_sound()
             self.remove_image(img_p)
 
-        def _rot_pol():
-            play_button_sound()
-            ang = item.get("angle", 0) + 4
-            if ang > 12:
-                ang = -12
-            item["angle"] = ang
-            self._save_state_quietly()
-            self.render_canvas_polaroids()
-
         def _res_pol(delta):
             play_button_sound()
-            w_cur = item.get("width", 135)
-            item["width"] = max(85, min(240, w_cur + delta))
+            w_cur = item.get("width", 140)
+            item["width"] = max(75, min(340, w_cur + delta))
             self._save_state_quietly()
             self.render_canvas_polaroids()
 
+        # İnteraktif Slider/Dial Tarzı Döndürme (Basılı tutup fareyi hareket ettirerek canlı çevirme)
+        def _start_pol_rot(e):
+            self._rot_start_mouse_angle = math.degrees(math.atan2(e.y - cy, e.x - cx))
+            self._rot_start_item_angle = item.get("angle", 0)
+            self._is_rotating = True
+            self._active_hover_item = {"type": "polaroid", "data": item}
+            self.canvas.config(cursor="exchange")
+
+        def _drag_pol_rot(e):
+            cur_mouse_angle = math.degrees(math.atan2(e.y - cy, e.x - cx))
+            delta = cur_mouse_angle - getattr(self, "_rot_start_mouse_angle", 0)
+            new_angle = (getattr(self, "_rot_start_item_angle", 0) + delta) % 360
+            if new_angle > 180:
+                new_angle -= 360
+            item["angle"] = round(new_angle, 1)
+            self.render_canvas_polaroids()
+
+        def _end_pol_rot(e):
+            self._is_rotating = False
+            self.canvas.config(cursor="hand2")
+            self._save_state_quietly()
+
         self.canvas.tag_bind("pol_del", "<Button-1>", lambda e: _del_pol())
-        self.canvas.tag_bind("pol_rot", "<Button-1>", lambda e: _rot_pol())
         self.canvas.tag_bind("pol_plus", "<Button-1>", lambda e: _res_pol(15))
         self.canvas.tag_bind("pol_minus", "<Button-1>", lambda e: _res_pol(-15))
 
+        self.canvas.tag_bind("pol_rot", "<Button-1>", _start_pol_rot)
+        self.canvas.tag_bind("pol_rot", "<B1-Motion>", _drag_pol_rot)
+        self.canvas.tag_bind("pol_rot", "<ButtonRelease-1>", _end_pol_rot)
+
         for tag in ("pol_del", "pol_rot", "pol_plus", "pol_minus"):
-            self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
+            self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
     def _update_scroll_region(self):
         """Metin, fotoğraflar ve çıkartmaların konumuna göre sayfa kaydırma sınırını dinamik ayarlar."""
@@ -2762,6 +2826,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                         self._pol_drag_start_x = event.x
                         self._pol_drag_start_y = event.y
                         self._pol_has_moved = False
+                        self._active_hover_item = {"type": "polaroid", "data": cur_it}
+                        self._is_dragging_item = True
                         self.canvas.tag_raise(t_name)
                         self.canvas.tag_raise("polaroid_item")
                         self.canvas.tag_raise("sticker_item")
@@ -2783,6 +2849,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                         self._update_scroll_region()
 
                     def _end(event):
+                        self._is_dragging_item = False
                         self.canvas.config(cursor="hand2")
                         if not getattr(self, "_pol_has_moved", False):
                             self.open_full_image(cur_it["path"])
@@ -2790,16 +2857,23 @@ class DailyNoteModal(ctk.CTkToplevel):
                             self._save_state_quietly()
 
                     def _enter(event):
+                        self._active_hover_item = {"type": "polaroid", "data": cur_it}
                         self.canvas.config(cursor="hand2")
                         self._show_polaroid_controls(cur_it, w_p, h_p)
 
-                    return _start, _drag, _end, _enter
+                    def _leave(event):
+                        if not getattr(self, "_is_dragging_item", False) and not getattr(self, "_is_rotating", False):
+                            if getattr(self, "_active_hover_item", None) and self._active_hover_item.get("data") == cur_it:
+                                self._active_hover_item = None
 
-                st_cb, dr_cb, end_cb, enter_cb = _make_pol_drag(tag_name, item, pw, ph)
+                    return _start, _drag, _end, _enter, _leave
+
+                st_cb, dr_cb, end_cb, enter_cb, leave_cb = _make_pol_drag(tag_name, item, pw, ph)
                 self.canvas.tag_bind(tag_name, "<Button-1>", st_cb)
                 self.canvas.tag_bind(tag_name, "<B1-Motion>", dr_cb)
                 self.canvas.tag_bind(tag_name, "<ButtonRelease-1>", end_cb)
                 self.canvas.tag_bind(tag_name, "<Enter>", enter_cb)
+                self.canvas.tag_bind(tag_name, "<Leave>", leave_cb)
             else:
                 self.canvas.tag_bind(tag_name, "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
                 self.canvas.tag_bind(tag_name, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
