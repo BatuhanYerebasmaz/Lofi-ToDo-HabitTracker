@@ -870,7 +870,7 @@ THEMES = {
             "today_col": "#DEE8DF", "today_header": "#4D7A56",
             "weekend_col": "#F4EDE8", "done": "#84B082",
             "checkbox_bg": "#F7F5F0", "checkbox_border": "#C5D6C5",
-            "moral_color": "#5B8C5A", "efektiflik_color": "#3D6E58",
+            "moral_color": "#D97706", "efektiflik_color": "#7C3AED",
             "accent": "#C96868", "text": "#243026", "text_secondary": "#637065",
             "separator": "#DCD7CC", "header_text": "#38523E",
             "chart_bg": "#F7F5F0", "chart_bar1": "#A2C5A1", "chart_bar2": "#84B082",
@@ -889,7 +889,7 @@ THEMES = {
             "today_col": "#FDE2D2", "today_header": "#D96B43",
             "weekend_col": "#F8E7DF", "done": "#EFA07A",
             "checkbox_bg": "#FAF3EC", "checkbox_border": "#E5C4B0",
-            "moral_color": "#E07A5F", "efektiflik_color": "#C45A38",
+            "moral_color": "#D9534F", "efektiflik_color": "#7E57C2",
             "accent": "#D96B43", "text": "#36281F", "text_secondary": "#7A665A",
             "separator": "#E5D3C3", "header_text": "#593E2F",
             "chart_bg": "#FAF3EC", "chart_bar1": "#F6BC9B", "chart_bar2": "#EFA07A",
@@ -908,7 +908,7 @@ THEMES = {
             "today_col": "#E2D6F5", "today_header": "#7B52BE",
             "weekend_col": "#F3E8F5", "done": "#A98CDE",
             "checkbox_bg": "#F6F2FC", "checkbox_border": "#D2C0EC",
-            "moral_color": "#8B5CF6", "efektiflik_color": "#6D28D9",
+            "moral_color": "#E11D48", "efektiflik_color": "#6D28D9",
             "accent": "#D86289", "text": "#2B203B", "text_secondary": "#695B7E",
             "separator": "#DDD2EE", "header_text": "#49326A",
             "chart_bg": "#F6F2FC", "chart_bar1": "#C6B2EC", "chart_bar2": "#A98CDE",
@@ -927,7 +927,7 @@ THEMES = {
             "today_col": "#CDE7F5", "today_header": "#1E7EA7",
             "weekend_col": "#EBF3F8", "done": "#48B8AC",
             "checkbox_bg": "#EFF7FB", "checkbox_border": "#B6D8E8",
-            "moral_color": "#0284C7", "efektiflik_color": "#0E7490",
+            "moral_color": "#EA580C", "efektiflik_color": "#0284C7",
             "accent": "#E26868", "text": "#182835", "text_secondary": "#516A7E",
             "separator": "#CFE2ED", "header_text": "#1A536F",
             "chart_bg": "#EFF7FB", "chart_bar1": "#7DC1E2", "chart_bar2": "#48B8AC",
@@ -946,7 +946,7 @@ THEMES = {
             "today_col": "#F9D6E3", "today_header": "#CB4576",
             "weekend_col": "#FAEDF2", "done": "#EA7EA4",
             "checkbox_bg": "#FCF3F6", "checkbox_border": "#F0C2D3",
-            "moral_color": "#E11D48", "efektiflik_color": "#BE123C",
+            "moral_color": "#E11D48", "efektiflik_color": "#7C3AED",
             "accent": "#CB4576", "text": "#351E28", "text_secondary": "#775163",
             "separator": "#EDD0DC", "header_text": "#6A2640",
             "chart_bg": "#FCF3F6", "chart_bar1": "#F2A1BE", "chart_bar2": "#EA7EA4",
@@ -965,7 +965,7 @@ THEMES = {
             "today_col": "#DFD4C5", "today_header": "#8C6239",
             "weekend_col": "#F0E8DD", "done": "#C89666",
             "checkbox_bg": "#FAF7F2", "checkbox_border": "#D2C3B2",
-            "moral_color": "#B4723E", "efektiflik_color": "#8C532B",
+            "moral_color": "#C2410C", "efektiflik_color": "#5B21B6",
             "accent": "#A45D5D", "text": "#2B2621", "text_secondary": "#6E6257",
             "separator": "#DDD2C4", "header_text": "#5C4033",
             "chart_bg": "#FAF7F2", "chart_bar1": "#DDB995", "chart_bar2": "#C89666",
@@ -984,7 +984,7 @@ THEMES = {
             "today_col": "#CBD5E1", "today_header": "#0369A1",
             "weekend_col": "#EAEFF5", "done": "#0284C7",
             "checkbox_bg": "#FFFFFF", "checkbox_border": "#94A3B8",
-            "moral_color": "#0284C7", "efektiflik_color": "#0369A1",
+            "moral_color": "#F59E0B", "efektiflik_color": "#0284C7",
             "accent": "#EF4444", "text": "#0F172A", "text_secondary": "#475569",
             "separator": "#CBD5E1", "header_text": "#0369A1",
             "chart_bg": "#FFFFFF", "chart_bar1": "#38BDF8", "chart_bar2": "#0284C7",
@@ -1003,7 +1003,7 @@ THEMES = {
             "today_col": "#FDEAA8", "today_header": "#B45309",
             "weekend_col": "#FAF4DC", "done": "#E5A93C",
             "checkbox_bg": "#FFFCF5", "checkbox_border": "#E8D49E",
-            "moral_color": "#D97706", "efektiflik_color": "#B45309",
+            "moral_color": "#DC2626", "efektiflik_color": "#7C3AED",
             "accent": "#E05353", "text": "#382B15", "text_secondary": "#786548",
             "separator": "#ECE0BA", "header_text": "#78350F",
             "chart_bg": "#FFFCF5", "chart_bar1": "#F8C76A", "chart_bar2": "#E5A93C",
@@ -1022,7 +1022,7 @@ THEMES = {
             "today_col": "#C5E6DC", "today_header": "#0F766E",
             "weekend_col": "#E2F1EC", "done": "#14B8A6",
             "checkbox_bg": "#F3FAF7", "checkbox_border": "#A7D7CB",
-            "moral_color": "#0D9488", "efektiflik_color": "#0F766E",
+            "moral_color": "#EA580C", "efektiflik_color": "#0D9488",
             "accent": "#E74C3C", "text": "#13352F", "text_secondary": "#4D736C",
             "separator": "#C4E5DB", "header_text": "#115E59",
             "chart_bg": "#F3FAF7", "chart_bar1": "#5EEAD4", "chart_bar2": "#14B8A6",
@@ -1041,7 +1041,7 @@ THEMES = {
             "today_col": "#F9D0C8", "today_header": "#C2410C",
             "weekend_col": "#FAECE9", "done": "#F97316",
             "checkbox_bg": "#FFF7F5", "checkbox_border": "#E8B9AF",
-            "moral_color": "#EA580C", "efektiflik_color": "#C2410C",
+            "moral_color": "#E11D48", "efektiflik_color": "#7C3AED",
             "accent": "#E11D48", "text": "#381D1A", "text_secondary": "#7C504A",
             "separator": "#EED0C9", "header_text": "#9A3412",
             "chart_bg": "#FFF7F5", "chart_bar1": "#FB923C", "chart_bar2": "#F97316",
@@ -1062,7 +1062,7 @@ THEMES = {
             "today_col": "#1E3A5F", "today_header": "#38BDF8",
             "weekend_col": "#161F30", "done": "#38BDF8",
             "checkbox_bg": "#1E293B", "checkbox_border": "#334155",
-            "moral_color": "#38BDF8", "efektiflik_color": "#0284C7",
+            "moral_color": "#FBBF24", "efektiflik_color": "#38BDF8",
             "accent": "#FB7185", "text": "#F8FAFC", "text_secondary": "#94A3B8",
             "separator": "#334155", "header_text": "#38BDF8",
             "chart_bg": "#1E293B", "chart_bar1": "#38BDF8", "chart_bar2": "#38BDF8",
@@ -1081,7 +1081,7 @@ THEMES = {
             "today_col": "#2A303C", "today_header": "#60A5FA",
             "weekend_col": "#19191C", "done": "#60A5FA",
             "checkbox_bg": "#1C1C20", "checkbox_border": "#2E2E35",
-            "moral_color": "#60A5FA", "efektiflik_color": "#3B82F6",
+            "moral_color": "#FB923C", "efektiflik_color": "#60A5FA",
             "accent": "#F87171", "text": "#F4F4F5", "text_secondary": "#A1A1AA",
             "separator": "#2E2E35", "header_text": "#60A5FA",
             "chart_bg": "#1C1C20", "chart_bar1": "#60A5FA", "chart_bar2": "#60A5FA",
@@ -1100,7 +1100,7 @@ THEMES = {
             "today_col": "#1E3B2C", "today_header": "#5EEAD4",
             "weekend_col": "#122018", "done": "#4EBA6F",
             "checkbox_bg": "#14251C", "checkbox_border": "#233F30",
-            "moral_color": "#4EBA6F", "efektiflik_color": "#10B981",
+            "moral_color": "#FBBF24", "efektiflik_color": "#34D399",
             "accent": "#F87171", "text": "#ECFDF5", "text_secondary": "#86EFAC",
             "separator": "#233F30", "header_text": "#5EEAD4",
             "chart_bg": "#14251C", "chart_bar1": "#5EEAD4", "chart_bar2": "#4EBA6F",
@@ -1119,7 +1119,7 @@ THEMES = {
             "today_col": "#38251E", "today_header": "#F6AD55",
             "weekend_col": "#1D1512", "done": "#E07A5F",
             "checkbox_bg": "#211815", "checkbox_border": "#3B2A24",
-            "moral_color": "#F6AD55", "efektiflik_color": "#E07A5F",
+            "moral_color": "#F6AD55", "efektiflik_color": "#C084FC",
             "accent": "#FEB2B2", "text": "#FAF5F0", "text_secondary": "#BCAAA4",
             "separator": "#3B2A24", "header_text": "#F6AD55",
             "chart_bg": "#211815", "chart_bar1": "#F6AD55", "chart_bar2": "#E07A5F",
@@ -1138,7 +1138,7 @@ THEMES = {
             "today_col": "#2D1D4A", "today_header": "#C084FC",
             "weekend_col": "#161025", "done": "#A855F7",
             "checkbox_bg": "#1A132B", "checkbox_border": "#312351",
-            "moral_color": "#C084FC", "efektiflik_color": "#9333EA",
+            "moral_color": "#F472B6", "efektiflik_color": "#C084FC",
             "accent": "#F472B6", "text": "#F5F3FF", "text_secondary": "#A78BFA",
             "separator": "#312351", "header_text": "#C084FC",
             "chart_bg": "#1A132B", "chart_bar1": "#C084FC", "chart_bar2": "#A855F7",
@@ -1157,7 +1157,7 @@ THEMES = {
             "today_col": "#25123A", "today_header": "#F43F5E",
             "weekend_col": "#0D0C1A", "done": "#06B6D4",
             "checkbox_bg": "#121124", "checkbox_border": "#2D2852",
-            "moral_color": "#06B6D4", "efektiflik_color": "#F43F5E",
+            "moral_color": "#F59E0B", "efektiflik_color": "#06B6D4",
             "accent": "#F43F5E", "text": "#F8FAFC", "text_secondary": "#94A3B8",
             "separator": "#2D2852", "header_text": "#06B6D4",
             "chart_bg": "#121124", "chart_bar1": "#F43F5E", "chart_bar2": "#06B6D4",
@@ -1176,7 +1176,7 @@ THEMES = {
             "today_col": "#3A3C4E", "today_header": "#BD93F9",
             "weekend_col": "#242531", "done": "#50FA7B",
             "checkbox_bg": "#282A36", "checkbox_border": "#44475A",
-            "moral_color": "#BD93F9", "efektiflik_color": "#50FA7B",
+            "moral_color": "#FFB86C", "efektiflik_color": "#BD93F9",
             "accent": "#FF5555", "text": "#F8F8F2", "text_secondary": "#6272A4",
             "separator": "#44475A", "header_text": "#BD93F9",
             "chart_bg": "#282A36", "chart_bar1": "#BD93F9", "chart_bar2": "#50FA7B",
@@ -1195,7 +1195,7 @@ THEMES = {
             "today_col": "#2A3D66", "today_header": "#48CAE4",
             "weekend_col": "#17203B", "done": "#00F5D4",
             "checkbox_bg": "#1C2541", "checkbox_border": "#3A506B",
-            "moral_color": "#48CAE4", "efektiflik_color": "#00B4D8",
+            "moral_color": "#FBBF24", "efektiflik_color": "#00F5D4",
             "accent": "#FF0054", "text": "#E0FBFC", "text_secondary": "#8DA9C4",
             "separator": "#3A506B", "header_text": "#48CAE4",
             "chart_bg": "#1C2541", "chart_bar1": "#48CAE4", "chart_bar2": "#00F5D4",
@@ -1214,7 +1214,7 @@ THEMES = {
             "today_col": "#381D5E", "today_header": "#EC4899",
             "weekend_col": "#1B0E2E", "done": "#F43F5E",
             "checkbox_bg": "#201235", "checkbox_border": "#4A2875",
-            "moral_color": "#F43F5E", "efektiflik_color": "#D946EF",
+            "moral_color": "#F43F5E", "efektiflik_color": "#06B6D4",
             "accent": "#06B6D4", "text": "#FDF4FF", "text_secondary": "#D8B4FE",
             "separator": "#4A2875", "header_text": "#EC4899",
             "chart_bg": "#201235", "chart_bar1": "#EC4899", "chart_bar2": "#F43F5E",
@@ -1233,7 +1233,7 @@ THEMES = {
             "today_col": "#242424", "today_header": "#E4E4E7",
             "weekend_col": "#0F0F0F", "done": "#E4E4E7",
             "checkbox_bg": "#121212", "checkbox_border": "#3F3F46",
-            "moral_color": "#E4E4E7", "efektiflik_color": "#A1A1AA",
+            "moral_color": "#FFFFFF", "efektiflik_color": "#A1A1AA",
             "accent": "#EF4444", "text": "#FAFAFA", "text_secondary": "#A1A1AA",
             "separator": "#27272A", "header_text": "#FAFAFA",
             "chart_bg": "#121212", "chart_bar1": "#71717A", "chart_bar2": "#D4D4D8",
@@ -4532,8 +4532,13 @@ class HabitTrackerApp(_AppBase):
 
         # 6. Moral Satırı
         moral_y = self._table_geo["moral_y"]
+        moral_cy = moral_y + row_h / 2
         canvas.create_text(
-            12, moral_y + row_h / 2, text="😊 Moral",
+            18, moral_cy, text="😊",
+            anchor="center", font=("Segoe UI Emoji", 9)
+        )
+        canvas.create_text(
+            32, moral_cy, text="Moral",
             anchor="w", font=("Segoe UI", 9, "bold"), fill=theme["moral_color"]
         )
 
@@ -4565,8 +4570,13 @@ class HabitTrackerApp(_AppBase):
 
         # 7. Efektiflik Satırı
         efekt_y = self._table_geo["efektiflik_y"]
+        efekt_cy = efekt_y + row_h / 2
         canvas.create_text(
-            12, efekt_y + row_h / 2, text="⚡ Efektiflik",
+            18, efekt_cy, text="⚡",
+            anchor="center", font=("Segoe UI", 9, "bold"), fill=theme["efektiflik_color"]
+        )
+        canvas.create_text(
+            32, efekt_cy, text="Efektiflik",
             anchor="w", font=("Segoe UI", 9, "bold"), fill=theme["efektiflik_color"]
         )
 
@@ -4598,8 +4608,13 @@ class HabitTrackerApp(_AppBase):
 
         # 8. Not Satırı
         note_y = self._table_geo["note_y"]
+        note_cy = note_y + row_h / 2
         canvas.create_text(
-            12, note_y + row_h / 2, text="📝 Not",
+            18, note_cy, text="📝",
+            anchor="center", font=("Segoe UI Emoji", 9)
+        )
+        canvas.create_text(
+            32, note_cy, text="Not",
             anchor="w", font=("Segoe UI", 9, "bold"), fill=theme.get("today_header", theme["text"])
         )
 
