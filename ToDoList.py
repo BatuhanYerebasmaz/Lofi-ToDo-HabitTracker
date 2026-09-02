@@ -2173,7 +2173,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                     "angle": s.get("angle", 0)
                 })
 
-        self.title("📖 Günün Defter Sayfası" if self.is_today else f"📖 Defter ({self.ds})")
+        self.title("📖 Günün Defter Sayfası" if self.is_today else "📖 Defter Arşivi")
 
         px, py = 100, 100
         try:
@@ -2205,15 +2205,16 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.after(200, self.apply_round_corners)
         self.bind("<Map>", lambda e: self.apply_round_corners())
 
-        self.bind("<Control-s>", lambda e: self.save_note())
-        self.setup_drag_drop()
+        if self.is_today:
+            self.bind("<Control-s>", lambda e: self.save_note())
+            self.setup_drag_drop()
+            self.after(20, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
+            self.after(100, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
+            self.after(530, self._blink_cursor)
 
         # Canvas oturduğunda polaroid, sticker ve şeffaf metinleri çiz
         self.after(60, self.render_canvas_polaroids)
         self.after(80, self.render_canvas_text)
-        self.after(20, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
-        self.after(100, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
-        self.after(530, self._blink_cursor)
 
     def apply_round_corners(self):
         """Pencere ve tüm üst taşıyıcı katmanlarının köşelerini Windows GDI ile pürüzsüz yuvarlatır."""
@@ -2297,13 +2298,14 @@ class DailyNoteModal(ctk.CTkToplevel):
             command=self.close_modal
         ).pack(side="right")
 
-        ctk.CTkButton(
-            action_box, text="📷 + Fotoğraf Ekle", width=120, height=28, corner_radius=8,
-            fg_color=theme.get("btn_primary", theme.get("btn_settings", "#B0D2AF")),
-            hover_color=theme.get("btn_primary_hover", theme.get("btn_settings_hover", "#92BF91")),
-            text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
-            command=lambda: (play_button_sound(), self.add_image())
-        ).pack(side="right", padx=(0, 8))
+        if self.is_today:
+            ctk.CTkButton(
+                action_box, text="📷 + Fotoğraf Ekle", width=120, height=28, corner_radius=8,
+                fg_color=theme.get("btn_primary", theme.get("btn_settings", "#B0D2AF")),
+                hover_color=theme.get("btn_primary_hover", theme.get("btn_settings_hover", "#92BF91")),
+                text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
+                command=lambda: (play_button_sound(), self.add_image())
+            ).pack(side="right", padx=(0, 8))
 
         # Pencereyi Başlıktan Sürükleme Desteği
         def _start_drag(event):
@@ -2351,6 +2353,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.textbox.bind("<Button-1>", lambda e: self.after(1, self.render_canvas_text))
         # Tuval üzerine tıklandığında imleci tıklanan satır ve sütuna al, gerekirse otomatik yeni satır ekle
         def _on_canvas_click(event):
+            if not self.is_today:
+                return
             clicked = self.canvas.find_withtag("current")
             tags = set()
             for cid in clicked:
@@ -2386,6 +2390,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                     pass
 
         def _on_canvas_key(event):
+            if not self.is_today:
+                return
             self.textbox.focus_set()
             if event.char and ord(event.char) >= 32:
                 self.textbox.insert("insert", event.char)
@@ -2460,13 +2466,14 @@ class DailyNoteModal(ctk.CTkToplevel):
         stats_bar = ctk.CTkFrame(page, fg_color="transparent")
         stats_bar.pack(fill="x", padx=16, pady=(0, 2))
 
-        self.sticker_btn = ctk.CTkButton(
-            stats_bar, text="🎨 + Çıkartmalar", width=125, height=26, corner_radius=13,
-            fg_color=paper_border, hover_color=theme.get("btn_primary", "#B0D2AF"),
-            text_color=text_color, font=ctk.CTkFont(size=11, weight="bold"),
-            command=self.toggle_sticker_popup
-        )
-        self.sticker_btn.pack(side="left")
+        if self.is_today:
+            self.sticker_btn = ctk.CTkButton(
+                stats_bar, text="🎨 + Çıkartmalar", width=125, height=26, corner_radius=13,
+                fg_color=paper_border, hover_color=theme.get("btn_primary", "#B0D2AF"),
+                text_color=text_color, font=ctk.CTkFont(size=11, weight="bold"),
+                command=self.toggle_sticker_popup
+            )
+            self.sticker_btn.pack(side="left")
 
         self.stat_label = ctk.CTkLabel(
             stats_bar, text="✍️ 0 kelime · 0 karakter",
@@ -2475,24 +2482,25 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.stat_label.pack(side="right")
         self.update_stats()
 
-        # 5. Alt Butonlar (Sayfayı Kaydet / Notu Sil)
-        btn_bar = ctk.CTkFrame(page, fg_color="transparent")
-        btn_bar.pack(fill="x", padx=16, pady=(4, 12))
+        # 5. Alt Butonlar (Sayfayı Kaydet / Notu Sil - Sadece bugünün sayfasında)
+        if self.is_today:
+            btn_bar = ctk.CTkFrame(page, fg_color="transparent")
+            btn_bar.pack(fill="x", padx=16, pady=(4, 12))
 
-        ctk.CTkButton(
-            btn_bar, text="💾 Sayfayı Kaydet  (Ctrl+S)", height=34, corner_radius=10,
-            fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
-            text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
-            command=self.save_note
-        ).pack(side="left", fill="x", expand=True, padx=(0, 8 if (self.note_text or self.note_images or self.note_stickers) else 0))
-
-        if self.note_text or self.note_images or self.note_stickers:
             ctk.CTkButton(
-                btn_bar, text="🗑️ Notu Sil", height=34, corner_radius=10,
-                fg_color=theme.get("btn_danger", "#EF4444"), hover_color=theme.get("btn_danger_hover", "#DC2626"),
-                text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
-                command=self.delete_note
-            ).pack(side="right")
+                btn_bar, text="💾 Sayfayı Kaydet  (Ctrl+S)", height=34, corner_radius=10,
+                fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
+                text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
+                command=self.save_note
+            ).pack(side="left", fill="x", expand=True, padx=(0, 8 if (self.note_text or self.note_images or self.note_stickers) else 0))
+
+            if self.note_text or self.note_images or self.note_stickers:
+                ctk.CTkButton(
+                    btn_bar, text="🗑️ Notu Sil", height=34, corner_radius=10,
+                    fg_color=theme.get("btn_danger", "#EF4444"), hover_color=theme.get("btn_danger_hover", "#DC2626"),
+                    text_color="#FFFFFF", font=ctk.CTkFont(size=11, weight="bold"),
+                    command=self.delete_note
+                ).pack(side="right")
 
     def toggle_sticker_popup(self):
         """Sol altta sevimli çıkartma seçici penceresini açar/kapatır."""
@@ -2622,7 +2630,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                     tag_name = f"stk_{idx}"
                     self.canvas.create_image(cur_x, cur_y, image=tk_img, tags=(tag_name, "sticker_item"), anchor="center")
 
-                    if True:
+                    if self.is_today:
                         def _make_stk_drag(t_name, cur_s, w_s, h_s):
                             def _start(event):
                                 self._stk_drag_start_x = event.x
@@ -2836,12 +2844,14 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
     def _on_text_key(self, event):
+        if not self.is_today:
+            return
         self._cursor_visible = True
         self.after(1, self.render_canvas_text)
 
     def _blink_cursor(self):
         try:
-            if not self.winfo_exists():
+            if not self.winfo_exists() or not self.is_today:
                 return
             self._cursor_visible = not getattr(self, "_cursor_visible", True)
             self.render_canvas_text()
@@ -2898,8 +2908,8 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.canvas.create_text(48, line_baseline, text=line_str, font=self.note_font,
                                    fill=self._text_color, anchor="sw", tags="notebook_text")
 
-        # Yanıp sönen imleç
-        if getattr(self, "_cursor_visible", True) and self.focus_get() == self.textbox:
+        # Yanıp sönen imleç (Sadece bugünün düzenlenebilir sayfasında gösterilir)
+        if getattr(self, "_cursor_visible", True) and self.is_today and self.focus_get() == self.textbox:
             try:
                 ins_pos = self.textbox.index("insert")
                 ins_row, ins_col = map(int, ins_pos.split("."))
@@ -3026,7 +3036,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             tag_name = f"pol_{idx}"
             self.canvas.create_image(cur_x, cur_y, image=tk_img, tags=(tag_name, "polaroid_item"), anchor="center")
 
-            if True:
+            if self.is_today:
                 def _make_pol_drag(t_name, cur_it, w_p, h_p):
                     def _start(event):
                         self._pol_drag_start_x = event.x
@@ -3094,7 +3104,22 @@ class DailyNoteModal(ctk.CTkToplevel):
                 self.canvas.tag_bind(tag_name, "<Enter>", enter_cb)
                 self.canvas.tag_bind(tag_name, "<Leave>", leave_cb)
             else:
-                self.canvas.tag_bind(tag_name, "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
+                def _make_arch_pol_click(t_name, p):
+                    def _on_arch_click(e):
+                        now = time.time()
+                        last_t = getattr(self, f"_pol_last_click_{t_name}", 0)
+                        if now - last_t < 0.55:
+                            cnt = getattr(self, f"_pol_click_cnt_{t_name}", 0) + 1
+                        else:
+                            cnt = 1
+                        setattr(self, f"_pol_last_click_{t_name}", now)
+                        setattr(self, f"_pol_click_cnt_{t_name}", cnt)
+                        if cnt >= 3:
+                            setattr(self, f"_pol_click_cnt_{t_name}", 0)
+                            self.open_full_image(p)
+                    return _on_arch_click
+
+                self.canvas.tag_bind(tag_name, "<Button-1>", _make_arch_pol_click(tag_name, img_path))
                 self.canvas.tag_bind(tag_name, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
 
         # Çıkartmaları Polaroidlerin üstüne çiz
@@ -4325,6 +4350,7 @@ class HabitTrackerApp(_AppBase):
         try:
             used_images = set()
             for n_val in getattr(self, "daily_notes", {}).values():
+                if isinstance(n_val, dict):
                     for p in n_val.get("images", []):
                         p_str = p.get("path") if isinstance(p, dict) else p
                         if p_str:
