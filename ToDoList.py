@@ -3916,8 +3916,11 @@ class HabitTrackerApp(_AppBase):
 
         # Level & Gamification
         if hasattr(self, "level_badge_lbl"):
-            self.level_badge_lbl.configure(text_color=theme.get("accent", "#FB7185"))
-            self.xp_bar.configure(fg_color=theme["progress_bg"], progress_color=theme.get("moral_color", "#D98A48"))
+            self.level_badge_lbl.configure(text_color=theme.get("today_header", theme.get("header_text", theme.get("accent", "#FB7185"))))
+            self.xp_bar.configure(
+                fg_color=theme["progress_bg"],
+                progress_color=theme.get("progress_fg", theme.get("today_header", theme["btn_primary"]))
+            )
             self.xp_label.configure(text_color=theme["text_secondary"])
 
             if hasattr(self, "streak_badge"):
@@ -4019,7 +4022,7 @@ class HabitTrackerApp(_AppBase):
         self.level_badge_lbl = ctk.CTkLabel(
             self.center_header, text="⭐ Lvl 1: Çaylak",
             font=ctk.CTkFont(size=11, weight="bold"),
-            text_color=theme.get("accent", "#FB7185")
+            text_color=theme.get("today_header", theme.get("header_text", theme.get("accent", "#FB7185")))
         )
         self.level_badge_lbl.pack(side="left", padx=(0, 8))
 
@@ -4027,7 +4030,7 @@ class HabitTrackerApp(_AppBase):
             self.center_header, width=200, height=12,
             corner_radius=6,
             fg_color=theme["progress_bg"],
-            progress_color=theme.get("moral_color", "#D98A48")
+            progress_color=theme.get("progress_fg", theme.get("today_header", theme["btn_primary"]))
         )
         self.xp_bar.pack(side="left", padx=(0, 8))
         self.xp_bar.set(0)
