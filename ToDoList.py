@@ -2404,6 +2404,21 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
         def _on_canvas_wheel(event):
+            # Çıkartma seçici penceresi (sticker popup) üzerindeyken ana defter tuvalini ASLA kaydırma!
+            if getattr(self, "_sticker_popup", None) and self._sticker_popup.winfo_ismapped():
+                try:
+                    w = getattr(event, "widget", None)
+                    if w and (w == self._sticker_popup or str(self._sticker_popup) in str(w)):
+                        return
+                    sx1 = self._sticker_popup.winfo_rootx()
+                    sy1 = self._sticker_popup.winfo_rooty()
+                    sx2 = sx1 + self._sticker_popup.winfo_width()
+                    sy2 = sy1 + self._sticker_popup.winfo_height()
+                    if sx1 <= event.x_root <= sx2 and sy1 <= event.y_root <= sy2:
+                        return
+                except Exception:
+                    pass
+
             target = getattr(self, "_active_hover_item", None)
             if target:
                 item_type = target.get("type")
@@ -3233,7 +3248,14 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.parent.save_data()
         self.parent.render_table()
-        self.destroy()
+    def destroy(self):
+        try:
+            self.canvas.unbind_all("<MouseWheel>")
+            self.canvas.unbind_all("<Button-4>")
+            self.canvas.unbind_all("<Button-5>")
+        except Exception:
+            pass
+        super().destroy()
 
     def close_modal(self):
         play_button_sound()
