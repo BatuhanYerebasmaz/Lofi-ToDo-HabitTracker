@@ -10,6 +10,9 @@ __pycache__/
 *.pyo
 *.pyd
 
+# macOS Geçici Dosyaları
+.DS_Store
+
 # Windows Kısayolları ve Geçici Dosyalar
 *.lnk
 Thumbs.db
@@ -17,3 +20,8 @@ desktop.ini
 scratch/
 .idea/
 .vscode/
+# macOS sanal ortami (launcher tarafindan olusturulur)
+MacOS/.venv/
+
+# macOS release ciktilari (build_release.command uretir)
+dist/
