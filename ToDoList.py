@@ -2344,8 +2344,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.textbox.bind("<KeyPress>", self._on_text_key)
         self.textbox.bind("<KeyRelease>", self._on_text_key)
         self.textbox.bind("<Button-1>", lambda e: self.after(1, self.render_canvas_text))
-
-        # Tuval üzerine tıklandığında imleci tıklanan satıra al ve odaklan
+        # Tuval üzerine tıklandığında imleci tıklanan satır ve sütuna al, gerekirse otomatik yeni satır ekle
         def _on_canvas_click(event):
             clicked = self.canvas.find_withtag("current")
             tags = set()
@@ -2354,11 +2353,28 @@ class DailyNoteModal(ctk.CTkToplevel):
             if not (tags & {"polaroid_item", "sticker_item", "pol_ctrl", "stk_ctrl", "pol_del", "pol_rot", "stk_del", "stk_rot"}):
                 self.textbox.focus_set()
                 try:
+                    click_x = event.x
                     click_y = event.y + self.canvas.canvasy(0)
                     disp_line = max(0, int((click_y - 30) / 28))
-                    raw_lines = self.textbox.get("1.0", "end-1c").split("\n")
-                    target_row = min(len(raw_lines), disp_line + 1)
-                    self.textbox.mark_set("insert", f"{target_row}.end")
+
+                    raw_text = self.textbox.get("1.0", "end-1c")
+                    raw_lines = raw_text.split("\n")
+
+                    if disp_line >= len(raw_lines):
+                        needed = disp_line - len(raw_lines) + 1
+                        self.textbox.insert("end", "\n" * needed)
+                        raw_lines = self.textbox.get("1.0", "end-1c").split("\n")
+
+                    target_row = disp_line + 1
+                    line_str = raw_lines[disp_line] if disp_line < len(raw_lines) else ""
+
+                    char_col = len(line_str)
+                    for c_idx in range(len(line_str) + 1):
+                        if 48 + self.note_font.measure(line_str[:c_idx]) >= click_x:
+                            char_col = c_idx
+                            break
+
+                    self.textbox.mark_set("insert", f"{target_row}.{char_col}")
                     self._cursor_visible = True
                     self.render_canvas_text()
                 except Exception:
@@ -2824,9 +2840,9 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         line_h = 28
         start_y = 30
-        # Çizgilerin üzerine tam oturan metin çizimi
+        # Çizgilerin üzerine tam oturan metin çizimi (Çizginin tam üzerine basan el yazısı)
         for idx, (line_str, r_idx, c_s, c_e) in enumerate(display_info):
-            line_baseline = start_y + (idx + 1) * line_h - 4
+            line_baseline = start_y + (idx + 1) * line_h - 1
             self.canvas.create_text(48, line_baseline, text=line_str, font=self.note_font,
                                    fill=self._text_color, anchor="sw", tags="notebook_text")
 
@@ -2852,8 +2868,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                     last_line = display_info[-1][0]
                     cursor_x = 48 + self.note_font.measure(last_line)
 
-                cursor_y_base = start_y + (target_disp_idx + 1) * line_h - 4
-                self.canvas.create_line(cursor_x, cursor_y_base - 18, cursor_x, cursor_y_base + 2,
+                cursor_y_base = start_y + (target_disp_idx + 1) * line_h - 1
+                self.canvas.create_line(cursor_x, cursor_y_base - 19, cursor_x, cursor_y_base + 3,
                                        fill=self._text_color, width=1.5, tags="canvas_cursor")
             except Exception:
                 pass
