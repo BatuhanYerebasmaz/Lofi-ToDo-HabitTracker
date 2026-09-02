@@ -2207,6 +2207,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         # Canvas oturduğunda polaroid, sticker ve şeffaf metinleri çiz
         self.after(60, self.render_canvas_polaroids)
         self.after(80, self.render_canvas_text)
+        self.after(20, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
         self.after(100, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
         self.after(530, self._blink_cursor)
 
@@ -2380,8 +2381,25 @@ class DailyNoteModal(ctk.CTkToplevel):
                 except Exception:
                     pass
 
-        self.canvas.bind("<Button-1>", _on_canvas_click, add="+")
-        self.canvas.bind("<Key>", lambda e: self.textbox.focus_set())
+        def _on_canvas_key(event):
+            self.textbox.focus_set()
+            if event.char and ord(event.char) >= 32:
+                self.textbox.insert("insert", event.char)
+                self._cursor_visible = True
+                self.render_canvas_text()
+            elif event.keysym in ("Return", "KP_Enter"):
+                self.textbox.insert("insert", "\n")
+                self._cursor_visible = True
+                self.render_canvas_text()
+            elif event.keysym == "BackSpace":
+                try:
+                    self.textbox.delete("insert-1c", "insert")
+                    self._cursor_visible = True
+                    self.render_canvas_text()
+                except Exception:
+                    pass
+
+        self.canvas.bind("<Key>", _on_canvas_key)
 
         # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
         def _on_canvas_wheel(event):
