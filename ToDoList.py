@@ -2399,6 +2399,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 except Exception:
                     pass
 
+        self.canvas.bind("<Button-1>", _on_canvas_click, add="+")
         self.canvas.bind("<Key>", _on_canvas_key)
 
         # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
