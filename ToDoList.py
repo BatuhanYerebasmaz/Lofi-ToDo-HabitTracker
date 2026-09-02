@@ -50,7 +50,7 @@ if missing_packages:
 
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, font as tkfont
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -2192,8 +2192,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._polaroid_win_ids = []
         self._sticker_win_ids = []
         self._sticker_popup = None
-        self._active_hover_item = None
-        self._is_dragging_item = False
+        self.note_font = tkfont.Font(family="Segoe Print", size=12)
+        self._cursor_visible = True
 
         self.setup_ui()
         self.after(5, self.apply_round_corners)
@@ -2204,9 +2204,11 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.bind("<Control-s>", lambda e: self.save_note())
         self.setup_drag_drop()
 
-        # Canvas oturduğunda polaroid ve stickerları çiz, metin kutusuna odaklan
+        # Canvas oturduğunda polaroid, sticker ve şeffaf metinleri çiz
         self.after(60, self.render_canvas_polaroids)
+        self.after(80, self.render_canvas_text)
         self.after(100, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
+        self.after(530, self._blink_cursor)
 
     def apply_round_corners(self):
         """Pencere ve tüm üst taşıyıcı katmanlarının köşelerini Windows GDI ile pürüzsüz yuvarlatır."""
@@ -2245,6 +2247,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
         sub_text_color = "#7D6B5D" if not self.is_dark else "#A8988B"
         margin_color = "#F0C4B4" if not self.is_dark else "#543C30"
+        self._text_color = text_color
 
         # Dış Defter Alanı
         self.outer_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -2332,22 +2335,16 @@ class DailyNoteModal(ctk.CTkToplevel):
         # Sol Kırmızı Margin Çizgisi
         self.canvas.create_line(42, 10, 42, 2400, fill=margin_color, width=2, tags="margin_line")
 
-        # Metin Alanı (Sadece yazılan satır kadar dinamik yükseklik - asla boş defteri veya fotoğrafları kapatmaz)
-        txt_lines = max(1, len(self.note_text.split("\n"))) if self.note_text else 1
-        initial_txt_h = max(30, txt_lines * 28 + 4)
-        txt_container = tk.Frame(self.canvas, bg=paper_bg)
-        self.textbox = ctk.CTkTextbox(
-            txt_container, width=515, height=initial_txt_h, fg_color=paper_bg, border_width=0,
-            text_color=text_color, font=ctk.CTkFont(family="Segoe Print", size=13),
-            wrap="word"
-        )
-        self.textbox.pack(fill="both", expand=True)
+        # Görünmez Metin Motoru (Klavye, seçim, pano ve geçmişi yönetir - Görseli %100 Şeffaf Tuvalde Çizilir)
+        self.textbox = tk.Text(self, font=self.note_font, wrap="none", undo=True)
         if self.note_text:
             self.textbox.insert("1.0", self.note_text)
 
-        self.txt_win_id = self.canvas.create_window(48, 16, anchor="nw", window=txt_container, width=515, height=initial_txt_h)
+        self.textbox.bind("<KeyPress>", self._on_text_key)
+        self.textbox.bind("<KeyRelease>", self._on_text_key)
+        self.textbox.bind("<Button-1>", lambda e: self.after(1, self.render_canvas_text))
 
-        # Tuval üzerine boş bir yere tıklandığında metin kutusunun sonuna odaklan
+        # Tuval üzerine tıklandığında imleci tıklanan satıra al ve odaklan
         def _on_canvas_click(event):
             clicked = self.canvas.find_withtag("current")
             tags = set()
@@ -2356,8 +2353,13 @@ class DailyNoteModal(ctk.CTkToplevel):
             if not (tags & {"polaroid_item", "sticker_item", "pol_ctrl", "stk_ctrl", "pol_del", "pol_rot", "stk_del", "stk_rot"}):
                 self.textbox.focus_set()
                 try:
-                    if hasattr(self.textbox, "_textbox"):
-                        self.textbox._textbox.mark_set("insert", "end-1c")
+                    click_y = event.y + self.canvas.canvasy(0)
+                    disp_line = max(0, int((click_y - 30) / 28))
+                    raw_lines = self.textbox.get("1.0", "end-1c").split("\n")
+                    target_row = min(len(raw_lines), disp_line + 1)
+                    self.textbox.mark_set("insert", f"{target_row}.end")
+                    self._cursor_visible = True
+                    self.render_canvas_text()
                 except Exception:
                     pass
 
@@ -2394,13 +2396,6 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.canvas.bind_all("<MouseWheel>", _on_canvas_wheel)
         self.canvas.bind_all("<Button-4>", _on_canvas_wheel)
         self.canvas.bind_all("<Button-5>", _on_canvas_wheel)
-
-        # Metin Yazıldıkça Dinamik Büyüme & İstatistik
-        def _on_key(event):
-            self.update_stats()
-            self._update_scroll_region()
-
-        self.textbox.bind("<KeyRelease>", _on_key)
 
         # 4. Alt Bilgi Çubuğu (Sol: Sticker Butonu · Sağ: Kelime Sayacı)
         stats_bar = ctk.CTkFrame(page, fg_color="transparent")
@@ -2781,14 +2776,100 @@ class DailyNoteModal(ctk.CTkToplevel):
         for tag in ("pol_del", "pol_rot"):
             self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
+    def _on_text_key(self, event):
+        self._cursor_visible = True
+        self.after(1, self.render_canvas_text)
+
+    def _blink_cursor(self):
+        try:
+            if not self.winfo_exists():
+                return
+            self._cursor_visible = not getattr(self, "_cursor_visible", True)
+            self.render_canvas_text()
+            self._blink_job = self.after(530, self._blink_cursor)
+        except Exception:
+            pass
+
+    def render_canvas_text(self):
+        """Metinleri %100 şeffaf olarak defter çizgilerinin tam üzerine çizer."""
+        self.canvas.delete("notebook_text")
+        self.canvas.delete("canvas_cursor")
+
+        full_text = self.textbox.get("1.0", "end-1c")
+        raw_lines = full_text.split("\n")
+
+        max_w = 510
+        display_info = []
+
+        for row_idx, r_line in enumerate(raw_lines):
+            if not r_line:
+                display_info.append(("", row_idx, 0, 0))
+                continue
+            words = r_line.split(" ")
+            cur_l = ""
+            c_start = 0
+            for w in words:
+                test_l = (cur_l + " " + w).strip() if cur_l else w
+                if self.note_font.measure(test_l) <= max_w:
+                    cur_l = test_l
+                else:
+                    if cur_l:
+                        display_info.append((cur_l, row_idx, c_start, c_start + len(cur_l)))
+                        c_start += len(cur_l) + 1
+                    cur_l = w
+            if cur_l:
+                display_info.append((cur_l, row_idx, c_start, c_start + len(cur_l)))
+
+        line_h = 28
+        start_y = 30
+        # Çizgilerin üzerine tam oturan metin çizimi
+        for idx, (line_str, r_idx, c_s, c_e) in enumerate(display_info):
+            line_baseline = start_y + (idx + 1) * line_h - 4
+            self.canvas.create_text(48, line_baseline, text=line_str, font=self.note_font,
+                                   fill=self._text_color, anchor="sw", tags="notebook_text")
+
+        # Yanıp sönen imleç
+        if getattr(self, "_cursor_visible", True) and self.focus_get() == self.textbox:
+            try:
+                ins_pos = self.textbox.index("insert")
+                ins_row, ins_col = map(int, ins_pos.split("."))
+                ins_row -= 1
+
+                target_disp_idx = 0
+                cursor_x = 48
+                found = False
+                for d_idx, (line_str, r_idx, c_s, c_e) in enumerate(display_info):
+                    if r_idx == ins_row and c_s <= ins_col <= c_e:
+                        target_disp_idx = d_idx
+                        sub = line_str[:ins_col - c_s]
+                        cursor_x = 48 + self.note_font.measure(sub)
+                        found = True
+                        break
+                if not found and display_info:
+                    target_disp_idx = len(display_info) - 1
+                    last_line = display_info[-1][0]
+                    cursor_x = 48 + self.note_font.measure(last_line)
+
+                cursor_y_base = start_y + (target_disp_idx + 1) * line_h - 4
+                self.canvas.create_line(cursor_x, cursor_y_base - 18, cursor_x, cursor_y_base + 2,
+                                       fill=self._text_color, width=1.5, tags="canvas_cursor")
+            except Exception:
+                pass
+
+        self.canvas.tag_raise("polaroid_item")
+        self.canvas.tag_raise("sticker_item")
+        self.canvas.tag_raise("pol_ctrl")
+        self.canvas.tag_raise("stk_ctrl")
+        self.update_stats()
+        self._update_scroll_region()
+
     def _update_scroll_region(self):
         """Metin, fotoğraflar ve çıkartmaların konumuna göre sayfa kaydırma sınırını dinamik ayarlar."""
         try:
-            txt = self.textbox.get("1.0", "end-1c")
-            num_lines = max(1, len(txt.split("\n"))) if txt else 1
-            txt_h = max(30, num_lines * 28 + 4)
-            self.textbox.configure(height=txt_h)
-            self.canvas.itemconfigure(self.txt_win_id, height=txt_h)
+            full_text = self.textbox.get("1.0", "end-1c")
+            raw_lines = full_text.split("\n")
+            num_lines = max(1, len(raw_lines))
+            txt_h = max(30, num_lines * 28 + 20)
 
             max_y = txt_h + 80
             for item in self.note_images:
