@@ -2823,20 +2823,30 @@ class DailyNoteModal(ctk.CTkToplevel):
             if not r_line:
                 display_info.append(("", row_idx, 0, 0))
                 continue
-            words = r_line.split(" ")
-            cur_l = ""
-            c_start = 0
-            for w in words:
-                test_l = (cur_l + " " + w).strip() if cur_l else w
-                if self.note_font.measure(test_l) <= max_w:
-                    cur_l = test_l
+            if self.note_font.measure(r_line) <= max_w:
+                display_info.append((r_line, row_idx, 0, len(r_line)))
+                continue
+
+            # Genişliği aşan satırlarda boşlukları bozmadan sarmala
+            start = 0
+            while start < len(r_line):
+                end = start + 1
+                last_space = -1
+                while end <= len(r_line) and self.note_font.measure(r_line[start:end]) <= max_w:
+                    if r_line[end - 1] == ' ':
+                        last_space = end - 1
+                    end += 1
+
+                if end > len(r_line):
+                    display_info.append((r_line[start:], row_idx, start, len(r_line)))
+                    break
+
+                if last_space != -1 and last_space > start:
+                    display_info.append((r_line[start:last_space + 1], row_idx, start, last_space + 1))
+                    start = last_space + 1
                 else:
-                    if cur_l:
-                        display_info.append((cur_l, row_idx, c_start, c_start + len(cur_l)))
-                        c_start += len(cur_l) + 1
-                    cur_l = w
-            if cur_l:
-                display_info.append((cur_l, row_idx, c_start, c_start + len(cur_l)))
+                    display_info.append((r_line[start:end - 1], row_idx, start, end - 1))
+                    start = end - 1
 
         line_h = 28
         start_y = 30
@@ -2864,9 +2874,18 @@ class DailyNoteModal(ctk.CTkToplevel):
                         found = True
                         break
                 if not found and display_info:
-                    target_disp_idx = len(display_info) - 1
-                    last_line = display_info[-1][0]
-                    cursor_x = 48 + self.note_font.measure(last_line)
+                    for d_idx in reversed(range(len(display_info))):
+                        if display_info[d_idx][1] == ins_row:
+                            target_disp_idx = d_idx
+                            line_str, r_idx, c_s, c_e = display_info[d_idx]
+                            sub = line_str[:max(0, ins_col - c_s)]
+                            cursor_x = 48 + self.note_font.measure(sub)
+                            found = True
+                            break
+                    if not found:
+                        target_disp_idx = len(display_info) - 1
+                        last_line = display_info[-1][0]
+                        cursor_x = 48 + self.note_font.measure(last_line)
 
                 cursor_y_base = start_y + (target_disp_idx + 1) * line_h - 1
                 self.canvas.create_line(cursor_x, cursor_y_base - 19, cursor_x, cursor_y_base + 3,
