@@ -3956,8 +3956,11 @@ class HabitTrackerApp(_AppBase):
         self.mode_icon_label.configure(text_color=theme["text_secondary"])
 
         # Buttons
-        self.settings_btn.configure(fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
-                                    text_color=theme["text"])
+        self.settings_btn.configure(
+            fg_color=theme["btn_primary"],
+            hover_color=theme["btn_primary_hover"],
+            text_color=theme["text"]
+        )
         if hasattr(self, "sticky_btn"):
             self.sticky_btn.configure(fg_color=theme["card_alt"], hover_color=theme["btn_primary_hover"], text_color=theme["text"])
         if hasattr(self, "sticky_widget") and self.sticky_widget and self.sticky_widget.winfo_exists():
@@ -4118,7 +4121,7 @@ class HabitTrackerApp(_AppBase):
         # Ayarlar butonu (Yumuşak hap şeklinde)
         self.settings_btn = ctk.CTkButton(
             self.right_header, text="⚙ Ayarlar", width=95, height=30,
-            fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
+            fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
             text_color=theme["text"], corner_radius=12, font=ctk.CTkFont(size=11, weight="bold"),
             command=self.open_settings)
         self.settings_btn.pack(side="left")
