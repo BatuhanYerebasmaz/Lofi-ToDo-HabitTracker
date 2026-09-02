@@ -2291,10 +2291,12 @@ class DailyNoteModal(ctk.CTkToplevel):
         # Sol Kırmızı Margin Çizgisi
         self.canvas.create_line(42, 10, 42, 2400, fill=margin_color, width=2, tags="margin_line")
 
-        # Metin Alanı (Canvas Window İçinde)
+        # Metin Alanı (Dinamik Yükseklikli Canvas Window İçinde)
+        txt_lines = max(1, len(self.note_text.split("\n"))) if self.note_text else 1
+        initial_txt_h = max(35, txt_lines * 28 + 10)
         txt_container = tk.Frame(self.canvas, bg=paper_bg)
         self.textbox = ctk.CTkTextbox(
-            txt_container, width=515, height=520, fg_color=paper_bg, border_width=0,
+            txt_container, width=515, height=initial_txt_h, fg_color=paper_bg, border_width=0,
             text_color=text_color, font=ctk.CTkFont(family="Segoe Print", size=13),
             wrap="word"
         )
@@ -2305,7 +2307,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         if not self.is_today:
             self.textbox.configure(state="disabled")
 
-        self.txt_win_id = self.canvas.create_window(48, 16, anchor="nw", window=txt_container, width=515, height=520)
+        self.txt_win_id = self.canvas.create_window(48, 16, anchor="nw", window=txt_container, width=515, height=initial_txt_h)
 
         # Fare Tekerleği ile Senkronize Kaydırma
         def _on_canvas_wheel(event):
@@ -2409,7 +2411,6 @@ class DailyNoteModal(ctk.CTkToplevel):
                     text_color=text_color
                 ).pack(anchor="w", padx=4, pady=(6, 2))
 
-                # 4'lü sütun grid alanı
                 grid_row = ctk.CTkFrame(scroll_stk, fg_color="transparent")
                 grid_row.pack(fill="x", padx=2, pady=2)
 
@@ -2443,15 +2444,15 @@ class DailyNoteModal(ctk.CTkToplevel):
         """Sayfaya yeni bir el çizimi çıkartma ekler."""
         play_button_sound()
         try:
-            cur_y = int(self.canvas.yview()[0] * 2000) + 160
+            cur_y = int(self.canvas.yview()[0] * 2000) + 180
         except Exception:
-            cur_y = 160
+            cur_y = 180
 
         self.note_stickers.append({
             "file": sticker_file,
             "x": 260,
-            "y": max(60, cur_y),
-            "size": 65,
+            "y": max(80, cur_y),
+            "size": 75,
             "angle": random.choice([-6, -3, 0, 3, 6])
         })
         self._save_state_quietly()
@@ -2460,22 +2461,14 @@ class DailyNoteModal(ctk.CTkToplevel):
             self._sticker_popup.lift()
 
     def render_canvas_stickers(self):
-        """Serbest sürüklenebilir çıkartmaları Canvas üzerinde en üst katmanda ve şeffaf biçimde çizer."""
-        for win_id in self._sticker_win_ids:
-            try:
-                self.canvas.delete(win_id)
-            except Exception:
-                pass
-        self._sticker_win_ids.clear()
+        """Serbest sürüklenebilir çıkartmaları doğrudan Canvas üzerine 100% saf şeffaflıkla (alpha) çizer."""
+        self.canvas.delete("sticker_item")
+        self.canvas.delete("stk_ctrl")
         self._sticker_cache.clear()
 
         if not self.note_stickers:
             self._update_scroll_region()
             return
-
-        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
-        line_color = "#EBD9C8" if not self.is_dark else "#332720"
-        margin_color = "#F0C4B4" if not self.is_dark else "#543C30"
 
         for idx, s in enumerate(self.note_stickers):
             s_file = s.get("file", "")
@@ -2483,7 +2476,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             if fpath and os.path.exists(fpath):
                 try:
                     pil_img = Image.open(fpath).convert("RGBA")
-                    stk_size = s.get("size", 65)
+                    stk_size = s.get("size", 75)
                     w, h = pil_img.size
                     new_w = stk_size
                     new_h = max(20, int(stk_size * (h / max(1, w))))
@@ -2493,138 +2486,197 @@ class DailyNoteModal(ctk.CTkToplevel):
                     if ang != 0:
                         pil_img = pil_img.rotate(-ang, expand=True, resample=Image.Resampling.BICUBIC)
 
-                    sw, sh = pil_img.size
-                    cur_x = s.get("x", 260)
-                    cur_y = s.get("y", 160)
-
-                    # Arka plan ile pürüzsüz harmanlama (Defter çizgileri + Polaroid harmanlama)
-                    base_img = Image.new("RGBA", (sw, sh), paper_bg)
-                    draw_b = ImageDraw.Draw(base_img)
-
-                    top_y = cur_y - sh // 2
-                    left_x = cur_x - sw // 2
-
-                    # Defter çizgilerini tabana çiz
-                    for line_y in range(30, 2400, 28):
-                        if top_y <= line_y <= top_y + sh:
-                            loc_y = line_y - top_y
-                            draw_b.line([(0, loc_y), (sw, loc_y)], fill=line_color, width=1)
-
-                    # Sol margin çizgisi
-                    if left_x <= 42 <= left_x + sw:
-                        loc_x = 42 - left_x
-                        draw_b.line([(loc_x, 0), (loc_x, sh)], fill=margin_color, width=2)
-
-                    composite_img = Image.alpha_composite(base_img, pil_img)
-                    tk_img = ImageTk.PhotoImage(composite_img)
+                    tk_img = ImageTk.PhotoImage(pil_img)
                     self._sticker_cache.append(tk_img)
 
-                    s_frame = tk.Frame(self.canvas, bg=paper_bg, bd=0, highlightthickness=0)
-                    s_lbl = tk.Label(s_frame, image=tk_img, bd=0, highlightthickness=0, bg=paper_bg)
-                    s_lbl.pack()
+                    sw = tk_img.width()
+                    sh = tk_img.height()
+                    cur_x = s.get("x", 260)
+                    cur_y = s.get("y", 180)
+
+                    tag_name = f"stk_{idx}"
+                    self.canvas.create_image(cur_x, cur_y, image=tk_img, tags=(tag_name, "sticker_item"), anchor="center")
 
                     if self.is_today:
-                        del_btn = tk.Label(s_frame, text="✕", font=("Segoe UI", 7, "bold"), fg="#EF4444", bg=paper_bg, cursor="hand2")
-                        plus_btn = tk.Label(s_frame, text="➕", font=("Segoe UI", 6), fg="#10B981", bg=paper_bg, cursor="hand2")
-                        min_btn = tk.Label(s_frame, text="➖", font=("Segoe UI", 6), fg="#6B7280", bg=paper_bg, cursor="hand2")
-                        rot_btn = tk.Label(s_frame, text="🔄", font=("Segoe UI", 6), fg="#3B82F6", bg=paper_bg, cursor="hand2")
+                        def _make_stk_drag(t_name, cur_s, w_s, h_s):
+                            def _start(event):
+                                self._stk_drag_start_x = event.x
+                                self._stk_drag_start_y = event.y
+                                self._stk_has_moved = False
+                                self.canvas.tag_raise(t_name)
+                                self.canvas.tag_raise("stk_ctrl")
+                                self.canvas.config(cursor="fleur")
 
-                        def _del_stk(cur_s=s):
-                            play_button_sound()
-                            if cur_s in self.note_stickers:
-                                self.note_stickers.remove(cur_s)
-                            self._save_state_quietly()
-                            self.render_canvas_stickers()
-
-                        def _res_stk(delta, cur_s=s):
-                            play_button_sound()
-                            cur_s["size"] = max(30, min(160, cur_s.get("size", 65) + delta))
-                            self._save_state_quietly()
-                            self.render_canvas_stickers()
-
-                        def _rot_stk(cur_s=s):
-                            play_button_sound()
-                            cur_ang = cur_s.get("angle", 0) + 8
-                            if cur_ang > 36:
-                                cur_ang = -36
-                            cur_s["angle"] = cur_ang
-                            self._save_state_quietly()
-                            self.render_canvas_stickers()
-
-                        del_btn.bind("<Button-1>", lambda e, cur=s: _del_stk(cur))
-                        plus_btn.bind("<Button-1>", lambda e, cur=s: _res_stk(14, cur))
-                        min_btn.bind("<Button-1>", lambda e, cur=s: _res_stk(-14, cur))
-                        rot_btn.bind("<Button-1>", lambda e, cur=s: _rot_stk(cur))
-
-                        def _show_c(e, d=del_btn, r=rot_btn, p=plus_btn, m=min_btn, sf=s_frame):
-                            d.place(relx=1.0, rely=0.0, anchor="ne")
-                            r.place(relx=0.0, rely=0.0, anchor="nw")
-                            p.place(relx=1.0, rely=1.0, anchor="se")
-                            m.place(relx=0.0, rely=1.0, anchor="sw")
-                            sf.config(cursor="fleur")
-
-                        def _hide_c(e, d=del_btn, r=rot_btn, p=plus_btn, m=min_btn, sf=s_frame):
-                            try:
-                                d.place_forget()
-                                r.place_forget()
-                                p.place_forget()
-                                m.place_forget()
-                                sf.config(cursor="")
-                            except Exception:
-                                pass
-
-                        s_frame.bind("<Enter>", _show_c)
-                        s_frame.bind("<Leave>", _hide_c)
-                        s_lbl.bind("<Enter>", _show_c)
-                        s_lbl.bind("<Leave>", _hide_c)
-
-                    win_id = self.canvas.create_window(cur_x, cur_y, anchor="center", window=s_frame)
-                    self._sticker_win_ids.append(win_id)
-                    self.canvas.tag_raise(win_id)
-
-                    if self.is_today:
-                        def _make_stk_drag(w_id, lbl, target_s):
-                            def _start(e):
-                                lbl._drag_start_x = e.x
-                                lbl._drag_start_y = e.y
-                                self.canvas.tag_raise(w_id)
-                                lbl.config(cursor="fleur")
-
-                            def _drag(e):
-                                dx = e.x - getattr(lbl, "_drag_start_x", 0)
-                                dy = e.y - getattr(lbl, "_drag_start_y", 0)
-                                coords = self.canvas.coords(w_id)
-                                nx = max(10, min(560, coords[0] + dx))
-                                ny = max(10, coords[1] + dy)
-                                self.canvas.coords(w_id, nx, ny)
-                                target_s["x"] = nx
-                                target_s["y"] = ny
+                            def _drag(event):
+                                dx = event.x - getattr(self, "_stk_drag_start_x", event.x)
+                                dy = event.y - getattr(self, "_stk_drag_start_y", event.y)
+                                if abs(dx) > 2 or abs(dy) > 2:
+                                    self._stk_has_moved = True
+                                self.canvas.move(t_name, dx, dy)
+                                self.canvas.move("stk_ctrl", dx, dy)
+                                cur_s["x"] += dx
+                                cur_s["y"] += dy
+                                self._stk_drag_start_x = event.x
+                                self._stk_drag_start_y = event.y
                                 self._update_scroll_region()
 
-                            def _end(e):
-                                lbl.config(cursor="hand2")
+                            def _end(event):
+                                self.canvas.config(cursor="hand2")
                                 self._save_state_quietly()
-                                # Taşındığı yerdeki arka planı yeniden harmanlamak için çiz
-                                self.render_canvas_stickers()
 
-                            return _start, _drag, _end
+                            def _enter(event):
+                                self.canvas.config(cursor="hand2")
+                                self._show_sticker_controls(cur_s, w_s, h_s)
 
-                        st_cb, dr_cb, end_cb = _make_stk_drag(win_id, s_lbl, s)
-                        s_lbl.bind("<Button-1>", st_cb)
-                        s_lbl.bind("<B1-Motion>", dr_cb)
-                        s_lbl.bind("<ButtonRelease-1>", end_cb)
+                            return _start, _drag, _end, _enter
+
+                        st_cb, dr_cb, end_cb, enter_cb = _make_stk_drag(tag_name, s, sw, sh)
+                        self.canvas.tag_bind(tag_name, "<Button-1>", st_cb)
+                        self.canvas.tag_bind(tag_name, "<B1-Motion>", dr_cb)
+                        self.canvas.tag_bind(tag_name, "<ButtonRelease-1>", end_cb)
+                        self.canvas.tag_bind(tag_name, "<Enter>", enter_cb)
 
                 except Exception as e:
                     print(f"Sticker çizim hatası: {e}")
 
+        # Çıkartmaları her zaman polaroidlerin ve çizgilerin en üstüne yükselt
+        self.canvas.tag_raise("polaroid_item")
+        self.canvas.tag_raise("sticker_item")
+        self.canvas.tag_raise("stk_ctrl")
+        self.canvas.tag_raise("pol_ctrl")
         self._update_scroll_region()
+
+    def _show_sticker_controls(self, s, sw, sh):
+        """Çıkartma üzerine gelindiğinde mini silme/döndürme/boyut butonlarını Canvas üzerine çizer."""
+        self.canvas.delete("stk_ctrl")
+        cx = s.get("x", 200)
+        cy = s.get("y", 200)
+        hw = sw // 2 - 2
+        hh = sh // 2 - 2
+        r = 9
+
+        # 1. Sağ Üst: Kırmızı Sil (✕)
+        self.canvas.create_oval(cx + hw - r, cy - hh - r, cx + hw + r, cy - hh + r,
+                                fill="#EF4444", outline="#DC2626", width=1, tags=("stk_ctrl", "stk_del"))
+        self.canvas.create_text(cx + hw, cy - hh, text="✕", font=("Segoe UI", 7, "bold"),
+                                fill="#FFFFFF", tags=("stk_ctrl", "stk_del"))
+
+        # 2. Sol Üst: Mavi Döndür (🔄)
+        self.canvas.create_oval(cx - hw - r, cy - hh - r, cx - hw + r, cy - hh + r,
+                                fill="#3B82F6", outline="#2563EB", width=1, tags=("stk_ctrl", "stk_rot"))
+        self.canvas.create_text(cx - hw, cy - hh, text="🔄", font=("Segoe UI", 6, "bold"),
+                                fill="#FFFFFF", tags=("stk_ctrl", "stk_rot"))
+
+        # 3. Sağ Alt: Yeşil Büyüt (➕)
+        self.canvas.create_oval(cx + hw - r, cy + hh - r, cx + hw + r, cy + hh + r,
+                                fill="#10B981", outline="#059669", width=1, tags=("stk_ctrl", "stk_plus"))
+        self.canvas.create_text(cx + hw, cy + hh, text="➕", font=("Segoe UI", 7, "bold"),
+                                fill="#FFFFFF", tags=("stk_ctrl", "stk_plus"))
+
+        # 4. Sol Alt: Gri Küçült (➖)
+        self.canvas.create_oval(cx - hw - r, cy + hh - r, cx - hw + r, cy + hh + r,
+                                fill="#6B7280", outline="#4B5563", width=1, tags=("stk_ctrl", "stk_minus"))
+        self.canvas.create_text(cx - hw, cy + hh, text="➖", font=("Segoe UI", 7, "bold"),
+                                fill="#FFFFFF", tags=("stk_ctrl", "stk_minus"))
+
+        def _del_stk(cur_s=s):
+            play_button_sound()
+            if cur_s in self.note_stickers:
+                self.note_stickers.remove(cur_s)
+            self._save_state_quietly()
+            self.render_canvas_stickers()
+
+        def _res_stk(delta, cur_s=s):
+            play_button_sound()
+            cur_s["size"] = max(30, min(160, cur_s.get("size", 75) + delta))
+            self._save_state_quietly()
+            self.render_canvas_stickers()
+
+        def _rot_stk(cur_s=s):
+            play_button_sound()
+            cur_ang = cur_s.get("angle", 0) + 8
+            if cur_ang > 36:
+                cur_ang = -36
+            cur_s["angle"] = cur_ang
+            self._save_state_quietly()
+            self.render_canvas_stickers()
+
+        self.canvas.tag_bind("stk_del", "<Button-1>", lambda e: _del_stk())
+        self.canvas.tag_bind("stk_plus", "<Button-1>", lambda e: _res_stk(14))
+        self.canvas.tag_bind("stk_minus", "<Button-1>", lambda e: _res_stk(-14))
+        self.canvas.tag_bind("stk_rot", "<Button-1>", lambda e: _rot_stk())
+
+        for tag in ("stk_del", "stk_rot", "stk_plus", "stk_minus"):
+            self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
+
+    def _show_polaroid_controls(self, item, pw, ph):
+        """Polaroid fotoğraf üzerine gelindiğinde mini kontrolleri çizer."""
+        self.canvas.delete("pol_ctrl")
+        cx = item.get("x", 200)
+        cy = item.get("y", 200)
+        hw = pw // 2 - 14
+        hh = ph // 2 - 14
+        r = 10
+
+        # 1. Sağ Üst: Kırmızı Sil (✕)
+        self.canvas.create_oval(cx + hw - r, cy - hh - r, cx + hw + r, cy - hh + r,
+                                fill="#EF4444", outline="#DC2626", width=1, tags=("pol_ctrl", "pol_del"))
+        self.canvas.create_text(cx + hw, cy - hh, text="✕", font=("Segoe UI", 8, "bold"),
+                                fill="#FFFFFF", tags=("pol_ctrl", "pol_del"))
+
+        # 2. Sol Üst: Mavi Döndür (🔄)
+        self.canvas.create_oval(cx - hw - r, cy - hh - r, cx - hw + r, cy - hh + r,
+                                fill="#3B82F6", outline="#2563EB", width=1, tags=("pol_ctrl", "pol_rot"))
+        self.canvas.create_text(cx - hw, cy - hh, text="🔄", font=("Segoe UI", 7, "bold"),
+                                fill="#FFFFFF", tags=("pol_ctrl", "pol_rot"))
+
+        # 3. Sağ Alt: Yeşil Büyüt (➕)
+        self.canvas.create_oval(cx + hw - r, cy + hh - r, cx + hw + r, cy + hh + r,
+                                fill="#10B981", outline="#059669", width=1, tags=("pol_ctrl", "pol_plus"))
+        self.canvas.create_text(cx + hw, cy + hh, text="➕", font=("Segoe UI", 8, "bold"),
+                                fill="#FFFFFF", tags=("pol_ctrl", "pol_plus"))
+
+        # 4. Sol Alt: Gri Küçült (➖)
+        self.canvas.create_oval(cx - hw - r, cy + hh - r, cx - hw + r, cy + hh + r,
+                                fill="#6B7280", outline="#4B5563", width=1, tags=("pol_ctrl", "pol_minus"))
+        self.canvas.create_text(cx - hw, cy + hh, text="➖", font=("Segoe UI", 8, "bold"),
+                                fill="#FFFFFF", tags=("pol_ctrl", "pol_minus"))
+
+        img_p = item.get("path")
+        def _del_pol():
+            play_button_sound()
+            self.remove_image(img_p)
+
+        def _rot_pol():
+            play_button_sound()
+            ang = item.get("angle", 0) + 4
+            if ang > 12:
+                ang = -12
+            item["angle"] = ang
+            self._save_state_quietly()
+            self.render_canvas_polaroids()
+
+        def _res_pol(delta):
+            play_button_sound()
+            w_cur = item.get("width", 135)
+            item["width"] = max(85, min(240, w_cur + delta))
+            self._save_state_quietly()
+            self.render_canvas_polaroids()
+
+        self.canvas.tag_bind("pol_del", "<Button-1>", lambda e: _del_pol())
+        self.canvas.tag_bind("pol_rot", "<Button-1>", lambda e: _rot_pol())
+        self.canvas.tag_bind("pol_plus", "<Button-1>", lambda e: _res_pol(15))
+        self.canvas.tag_bind("pol_minus", "<Button-1>", lambda e: _res_pol(-15))
+
+        for tag in ("pol_del", "pol_rot", "pol_plus", "pol_minus"):
+            self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
 
     def _update_scroll_region(self):
         """Metin, fotoğraflar ve çıkartmaların konumuna göre sayfa kaydırma sınırını dinamik ayarlar."""
         try:
             txt = self.textbox.get("1.0", "end-1c")
-            num_lines = max(18, len(txt.split("\n")))
-            txt_h = max(520, num_lines * 28 + 40)
+            num_lines = max(1, len(txt.split("\n"))) if txt else 1
+            txt_h = max(35, num_lines * 28 + 10)
             self.textbox.configure(height=txt_h)
             self.canvas.itemconfigure(self.txt_win_id, height=txt_h)
 
@@ -2660,23 +2712,17 @@ class DailyNoteModal(ctk.CTkToplevel):
                                           outline=ring_highlight, width=1.0)
 
     def render_canvas_polaroids(self):
-        """Serbest sürüklenebilir Polaroid fotoğrafları Canvas üzerine yerleştirir."""
-        for win_id in self._polaroid_win_ids:
-            try:
-                self.canvas.delete(win_id)
-            except Exception:
-                pass
-        self._polaroid_win_ids.clear()
+        """Serbest sürüklenebilir Polaroid fotoğrafları doğrudan Canvas üzerine çizer."""
+        self.canvas.delete("polaroid_item")
+        self.canvas.delete("pol_ctrl")
         self._photo_cache.clear()
 
-        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
-
         default_coords = [
-            (320, 60),   # 1. Fotoğraf: Sağ üst
-            (60, 360),   # 2. Fotoğraf: Sol orta
-            (320, 520),  # 3. Fotoğraf: Sağ alt
-            (70, 140),   # 4. Fotoğraf: Sol üst
-            (180, 420),  # 5. Fotoğraf: Orta
+            (360, 200),   # 1. Fotoğraf: Sağ üst
+            (180, 380),   # 2. Fotoğraf: Sol orta
+            (360, 540),   # 3. Fotoğraf: Sağ alt
+            (180, 180),   # 4. Fotoğraf: Sol üst
+            (260, 440),   # 5. Fotoğraf: Orta
         ]
 
         for idx, item in enumerate(self.note_images):
@@ -2685,7 +2731,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 continue
 
             angle = item.get("angle", self._ANGLES[idx % len(self._ANGLES)])
-            img_w = item.get("width", 135)
+            img_w = item.get("width", 140)
             img_h = int(img_w * 0.77)
 
             polaroid_pil = create_tilted_polaroid(img_path, width=img_w, height=img_h, angle=angle)
@@ -2698,7 +2744,6 @@ class DailyNoteModal(ctk.CTkToplevel):
             pw = polaroid_pil.width
             ph = polaroid_pil.height
 
-            # Koordinat belirle
             cur_x = item.get("x")
             cur_y = item.get("y")
             if cur_x is None or cur_y is None:
@@ -2708,126 +2753,58 @@ class DailyNoteModal(ctk.CTkToplevel):
                 item["x"] = cur_x
                 item["y"] = cur_y
 
-            p_frame = tk.Frame(self.canvas, bg=paper_bg, bd=0, highlightthickness=0)
-            p_canvas = tk.Canvas(p_frame, width=pw, height=ph, bg=paper_bg, highlightthickness=0)
-            p_canvas.pack()
+            tag_name = f"pol_{idx}"
+            self.canvas.create_image(cur_x, cur_y, image=tk_img, tags=(tag_name, "polaroid_item"), anchor="center")
 
-            p_canvas.create_image(pw // 2, ph // 2, image=tk_img, tags="photo")
-
-            # Hover Kontrolleri (🔄, ➕, ➖, ✕)
             if self.is_today:
-                r = 10
-                # Sağ Üst: Sil
-                p_canvas.create_oval(pw - 14 - r, 14 - r, pw - 14 + r, 14 + r,
-                                     fill="#EF4444", outline="#DC2626", width=1, tags=("ctrl_group", "del_btn"))
-                p_canvas.create_text(pw - 14, 14, text="✕", font=("Segoe UI", 8, "bold"),
-                                     fill="#FFFFFF", tags=("ctrl_group", "del_btn"))
-
-                # Sol Üst: Döndür
-                p_canvas.create_oval(14 - r, 14 - r, 14 + r, 14 + r,
-                                     fill="#3B82F6", outline="#2563EB", width=1, tags=("ctrl_group", "rot_btn"))
-                p_canvas.create_text(14, 14, text="🔄", font=("Segoe UI", 7, "bold"),
-                                     fill="#FFFFFF", tags=("ctrl_group", "rot_btn"))
-
-                # Sağ Alt: Büyüt
-                p_canvas.create_oval(pw - 14 - r, ph - 14 - r, pw - 14 + r, ph - 14 + r,
-                                     fill="#10B981", outline="#059669", width=1, tags=("ctrl_group", "plus_btn"))
-                p_canvas.create_text(pw - 14, ph - 14, text="➕", font=("Segoe UI", 8, "bold"),
-                                     fill="#FFFFFF", tags=("ctrl_group", "plus_btn"))
-
-                # Sol Alt: Küçült
-                p_canvas.create_oval(14 - r, ph - 14 - r, 14 + r, ph - 14 + r,
-                                     fill="#6B7280", outline="#4B5563", width=1, tags=("ctrl_group", "minus_btn"))
-                p_canvas.create_text(14, ph - 14, text="➖", font=("Segoe UI", 8, "bold"),
-                                     fill="#FFFFFF", tags=("ctrl_group", "minus_btn"))
-
-                p_canvas.itemconfigure("ctrl_group", state="hidden")
-
-                def _rot(target_item=item):
-                    play_button_sound()
-                    ang = target_item.get("angle", 0) + 4
-                    if ang > 12:
-                        ang = -12
-                    target_item["angle"] = ang
-                    self._save_state_quietly()
-                    self.render_canvas_polaroids()
-
-                def _res(delta, target_item=item):
-                    play_button_sound()
-                    w_cur = target_item.get("width", 135)
-                    target_item["width"] = max(85, min(240, w_cur + delta))
-                    self._save_state_quietly()
-                    self.render_canvas_polaroids()
-
-                p_canvas.tag_bind("del_btn", "<Button-1>", lambda e, p=img_path: (play_button_sound(), self.remove_image(p)))
-                p_canvas.tag_bind("rot_btn", "<Button-1>", lambda e: _rot())
-                p_canvas.tag_bind("plus_btn", "<Button-1>", lambda e: _res(15))
-                p_canvas.tag_bind("minus_btn", "<Button-1>", lambda e: _res(-15))
-
-                for tag in ("del_btn", "rot_btn", "plus_btn", "minus_btn"):
-                    p_canvas.tag_bind(tag, "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
-                    p_canvas.tag_bind(tag, "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
-
-            # Canvas Window Olarak Yerleştir
-            win_id = self.canvas.create_window(cur_x, cur_y, anchor="nw", window=p_frame)
-            self._polaroid_win_ids.append(win_id)
-
-            # Sürükle-Bırak Olayları (Canvas Koordinatlarında Serbest Taşıma)
-            if self.is_today:
-                def _make_drag_handlers(w_id, p_can, data):
+                def _make_pol_drag(t_name, cur_it, w_p, h_p):
                     def _start(event):
-                        p_can._drag_start_x = event.x
-                        p_can._drag_start_y = event.y
-                        p_can._has_moved = False
-                        self.canvas.tag_raise(w_id)
-                        p_can.config(cursor="fleur")
+                        self._pol_drag_start_x = event.x
+                        self._pol_drag_start_y = event.y
+                        self._pol_has_moved = False
+                        self.canvas.tag_raise(t_name)
+                        self.canvas.tag_raise("polaroid_item")
+                        self.canvas.tag_raise("sticker_item")
+                        self.canvas.tag_raise("pol_ctrl")
+                        self.canvas.tag_raise("stk_ctrl")
+                        self.canvas.config(cursor="fleur")
 
                     def _drag(event):
-                        dx = event.x - p_can._drag_start_x
-                        dy = event.y - p_can._drag_start_y
+                        dx = event.x - getattr(self, "_pol_drag_start_x", event.x)
+                        dy = event.y - getattr(self, "_pol_drag_start_y", event.y)
                         if abs(dx) > 2 or abs(dy) > 2:
-                            p_can._has_moved = True
-                        coords = self.canvas.coords(w_id)
-                        nx = max(8, min(440, coords[0] + dx))
-                        ny = max(10, coords[1] + dy)
-                        self.canvas.coords(w_id, nx, ny)
-                        data["x"] = nx
-                        data["y"] = ny
+                            self._pol_has_moved = True
+                        self.canvas.move(t_name, dx, dy)
+                        self.canvas.move("pol_ctrl", dx, dy)
+                        cur_it["x"] += dx
+                        cur_it["y"] += dy
+                        self._pol_drag_start_x = event.x
+                        self._pol_drag_start_y = event.y
                         self._update_scroll_region()
 
                     def _end(event):
-                        p_can.config(cursor="hand2")
-                        if not getattr(p_can, "_has_moved", False):
-                            self.open_full_image(data["path"])
+                        self.canvas.config(cursor="hand2")
+                        if not getattr(self, "_pol_has_moved", False):
+                            self.open_full_image(cur_it["path"])
                         else:
                             self._save_state_quietly()
 
                     def _enter(event):
-                        p_can.itemconfigure("ctrl_group", state="normal")
-                        p_can.config(cursor="hand2")
+                        self.canvas.config(cursor="hand2")
+                        self._show_polaroid_controls(cur_it, w_p, h_p)
 
-                    def _leave(event):
-                        try:
-                            if event.x < 0 or event.x >= p_can.winfo_width() or event.y < 0 or event.y >= p_can.winfo_height():
-                                p_can.itemconfigure("ctrl_group", state="hidden")
-                                p_can.config(cursor="")
-                        except Exception:
-                            pass
+                    return _start, _drag, _end, _enter
 
-                    return _start, _drag, _end, _enter, _leave
-
-                start_cb, drag_cb, end_cb, enter_cb, leave_cb = _make_drag_handlers(win_id, p_canvas, item)
-                p_canvas.tag_bind("photo", "<Button-1>", start_cb)
-                p_canvas.tag_bind("photo", "<B1-Motion>", drag_cb)
-                p_canvas.tag_bind("photo", "<ButtonRelease-1>", end_cb)
-                p_canvas.bind("<Enter>", enter_cb)
-                p_canvas.bind("<Leave>", leave_cb)
+                st_cb, dr_cb, end_cb, enter_cb = _make_pol_drag(tag_name, item, pw, ph)
+                self.canvas.tag_bind(tag_name, "<Button-1>", st_cb)
+                self.canvas.tag_bind(tag_name, "<B1-Motion>", dr_cb)
+                self.canvas.tag_bind(tag_name, "<ButtonRelease-1>", end_cb)
+                self.canvas.tag_bind(tag_name, "<Enter>", enter_cb)
             else:
-                p_canvas.tag_bind("photo", "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
-                p_canvas.tag_bind("photo", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
-                p_canvas.tag_bind("photo", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+                self.canvas.tag_bind(tag_name, "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
+                self.canvas.tag_bind(tag_name, "<Enter>", lambda e: self.canvas.config(cursor="hand2"))
 
-        # Çıkartmaları da çiz
+        # Çıkartmaları Polaroidlerin üstüne çiz
         self.render_canvas_stickers()
 
     def update_stats(self):
