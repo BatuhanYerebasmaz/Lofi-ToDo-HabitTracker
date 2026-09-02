@@ -24,4 +24,6 @@ scratch/
 MacOS/.venv/
 
 # macOS release ciktilari (build_release.command uretir)
-dist/
+# .dmg repoda tutulur, .app paketi tutulmaz (25 MB, DMG'nin acilmis hali)
+dist/*
+!dist/*.dmg
