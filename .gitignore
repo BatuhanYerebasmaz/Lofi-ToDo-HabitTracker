@@ -23,6 +23,9 @@ scratch/
 # macOS sanal ortami (launcher tarafindan olusturulur)
 MacOS/.venv/
 
+# Linux sanal ortami (launcher tarafindan olusturulur)
+Linux/.venv/
+
 # macOS release ciktilari (build_release.command uretir)
 # .dmg repoda tutulur, .app paketi tutulmaz (25 MB, DMG'nin acilmis hali)
 dist/*
