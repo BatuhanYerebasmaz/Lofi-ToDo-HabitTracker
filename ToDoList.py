@@ -2629,7 +2629,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             p_head.pack(fill="x", padx=12, pady=(8, 4))
 
             ctk.CTkLabel(
-                p_head, text="🎨  El Çizimi Çıkartma Paleti (100 Çıkartma)",
+                p_head, text="🎨  El Çizimi Çıkartma Paleti",
                 font=ctk.CTkFont(family="Georgia", size=12, weight="bold"),
                 text_color=text_color
             ).pack(side="left")
@@ -2648,7 +2648,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                 cat_header = ctk.CTkFrame(scroll_stk, fg_color="transparent")
                 cat_header.pack(fill="x", padx=4, pady=(8, 2))
                 ctk.CTkLabel(
-                    cat_header, text=f"{cat_name} ({len(items)})", font=ctk.CTkFont(size=11, weight="bold"),
+                    cat_header, text=cat_name, font=ctk.CTkFont(size=11, weight="bold"),
                     text_color=text_color
                 ).pack(side="left")
 
