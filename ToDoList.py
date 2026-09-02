@@ -1952,8 +1952,12 @@ class DailyNoteTooltip:
         tw.update_idletasks()
         tw_w = tw.winfo_reqwidth()
         tw_h = tw.winfo_reqheight()
+        sw = tw.winfo_screenwidth()
 
         pos_x = x_root + 15
+        if pos_x + tw_w > sw - 10:
+            pos_x = max(10, x_root - tw_w - 15)
+
         pos_y = y_root - tw_h - 10
         if pos_y < 10:
             pos_y = y_root + 25
@@ -2404,6 +2408,9 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
         def _on_canvas_wheel(event):
+            if not self.winfo_exists() or not hasattr(self, "canvas") or not self.canvas.winfo_exists():
+                return
+
             # Çıkartma seçici penceresi (sticker popup) üzerindeyken ana defter tuvalini ASLA kaydırma!
             if getattr(self, "_sticker_popup", None) and self._sticker_popup.winfo_ismapped():
                 try:
@@ -2879,8 +2886,9 @@ class DailyNoteModal(ctk.CTkToplevel):
                     display_info.append((r_line[start:last_space + 1], row_idx, start, last_space + 1))
                     start = last_space + 1
                 else:
-                    display_info.append((r_line[start:end - 1], row_idx, start, end - 1))
-                    start = end - 1
+                    chunk_end = max(start + 1, end - 1)
+                    display_info.append((r_line[start:chunk_end], row_idx, start, chunk_end))
+                    start = chunk_end
 
         line_h = 28
         start_y = 30
@@ -3050,7 +3058,20 @@ class DailyNoteModal(ctk.CTkToplevel):
                         self._is_dragging_item = False
                         self.canvas.config(cursor="hand2")
                         if not getattr(self, "_pol_has_moved", False):
-                            self.open_full_image(cur_it["path"])
+                            now = time.time()
+                            last_t = getattr(self, f"_pol_last_click_{t_name}", 0)
+                            if now - last_t < 0.55:
+                                cnt = getattr(self, f"_pol_click_cnt_{t_name}", 0) + 1
+                            else:
+                                cnt = 1
+                            setattr(self, f"_pol_last_click_{t_name}", now)
+                            setattr(self, f"_pol_click_cnt_{t_name}", cnt)
+
+                            if cnt >= 3:
+                                setattr(self, f"_pol_click_cnt_{t_name}", 0)
+                                self.open_full_image(cur_it["path"])
+                            else:
+                                self._save_state_quietly()
                         else:
                             self._save_state_quietly()
 
@@ -3273,6 +3294,12 @@ class DailyNoteModal(ctk.CTkToplevel):
     def destroy(self):
         if DailyNoteModal.CURRENT_INSTANCE is self:
             DailyNoteModal.CURRENT_INSTANCE = None
+        if hasattr(self, "_blink_job") and self._blink_job:
+            try:
+                self.after_cancel(self._blink_job)
+            except Exception:
+                pass
+            self._blink_job = None
         try:
             self.canvas.unbind_all("<MouseWheel>")
             self.canvas.unbind_all("<Button-4>")
@@ -5929,6 +5956,10 @@ class HabitTrackerApp(_AppBase):
                 self.tray_icon.stop()
             except Exception:
                 pass
+        try:
+            plt.close("all")
+        except Exception:
+            pass
         try:
             self.destroy()
         except Exception:
