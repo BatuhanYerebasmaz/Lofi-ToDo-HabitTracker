@@ -1,6 +1,21 @@
 import sys
 import subprocess
 import os
+import datetime
+import calendar
+import math
+import json
+import random
+import threading
+import ctypes
+import socket
+import winsound
+import webbrowser
+import time
+import re
+import shutil
+import urllib.request
+import urllib.error
 
 # ============================================================
 #  OTOMATİK BAĞIMLILIK KONTROLÜ & YÜKLEYİCİ (SELF-HEALING)
@@ -57,19 +72,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageDraw, ImageTk, ImageOps
-import datetime
-import calendar
-import math
-import json
-import random
-import threading
-import ctypes
-import socket
-import winsound
-import webbrowser
-import time
-import re
-import shutil
+import pystray
 
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
@@ -229,7 +232,6 @@ class SoundEngine:
                     winmm.mciSendStringW(f'open "{p}" type waveaudio alias snd_poly_0', None, 0, 0)
                     cls._channel_files["snd_poly_0"] = p
                     winmm.mciSendStringW("play snd_poly_0 from 0", None, 0, 0)
-                    import time
                     time.sleep(0.01)
                     winmm.mciSendStringW("stop snd_poly_0", None, 0, 0)
             except Exception:
@@ -257,6 +259,19 @@ class SoundEngine:
                     cls._channel_files[ch] = file_path
 
                 winmm.mciSendStringW(f"play {ch} from 0", None, 0, 0)
+            except Exception:
+                pass
+
+    @classmethod
+    def close_all(cls):
+        """Tüm açık Windows MCI ses kanallarını güvenle kapatır ve serbest bırakır."""
+        with cls._lock:
+            try:
+                winmm = ctypes.windll.winmm
+                for ch in list(cls._channel_files.keys()):
+                    winmm.mciSendStringW(f"close {ch}", None, 0, 0)
+                winmm.mciSendStringW("close all", None, 0, 0)
+                cls._channel_files.clear()
             except Exception:
                 pass
 
@@ -376,10 +391,6 @@ def get_level_info(xp):
 # ============================================================
 #  SİSTEM TEPSİSİ & YEREL AI DARLAMA MOTORU
 # ============================================================
-import urllib.request
-import urllib.error
-import pystray
-
 ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "ToDo.ico")
 if not os.path.exists(ICON_FILE):
     ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ToDo.ico")
@@ -1975,6 +1986,16 @@ class DailyNoteTooltip:
 
 
 _POLAROID_CACHE = {}
+_MAX_POLAROID_CACHE = 32
+
+
+def _add_to_polaroid_cache(key, val):
+    if len(_POLAROID_CACHE) >= _MAX_POLAROID_CACHE:
+        try:
+            _POLAROID_CACHE.pop(next(iter(_POLAROID_CACHE)))
+        except Exception:
+            pass
+    _POLAROID_CACHE[key] = val
 
 
 def draw_washi_tape_polygon(img, center, length=32, thickness=10, angle_deg=45, color=(238, 185, 145, 215)):
@@ -1991,14 +2012,6 @@ def draw_washi_tape_polygon(img, center, length=32, thickness=10, angle_deg=45, 
     tdraw = ImageDraw.Draw(tape_layer)
     tdraw.polygon(poly, fill=color)
     return Image.alpha_composite(img, tape_layer)
-
-
-def get_rotated_corner(cx, cy, local_x, local_y, angle_deg):
-    """Verilen açıyla döndürülmüş yerel bir noktanın global tuval koordinatlarını döndürür."""
-    rad = math.radians(angle_deg)
-    rx = cx + local_x * math.cos(rad) + local_y * math.sin(rad)
-    ry = cy - local_x * math.sin(rad) + local_y * math.cos(rad)
-    return rx, ry
 
 
 def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
@@ -2061,7 +2074,7 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
     if angle != 0:
         polaroid = polaroid.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
 
-    _POLAROID_CACHE[cache_key] = polaroid
+    _add_to_polaroid_cache(cache_key, polaroid)
     return polaroid
 
 
@@ -2078,7 +2091,7 @@ STICKER_CATALOG = {
         ("Ayçiçeği", "nature_sunflower.png"),
         ("Lale", "nature_tulip.png"),
     ],
-    "☕ Cozy Kafe": [
+    "☕ Cozy Kafe & İçecek": [
         ("Sıcak Kahve", "cafe_coffee.png"),
         ("Matcha Latte", "cafe_matcha.png"),
         ("Boba Çayı", "cafe_boba.png"),
@@ -2087,16 +2100,44 @@ STICKER_CATALOG = {
         ("Çilekli Pasta", "cafe_cake.png"),
         ("Kurabiye", "cafe_cookie.png"),
         ("Yumurtalı Tost", "cafe_toast.png"),
+        ("Kremalı Parfe", "cafe_parfait.png"),
+        ("Çilekli Milkshake", "cafe_milkshake.png"),
     ],
-    "✨ Sevimli Çizimler": [
+    "🐾 Sevimli Hayvan Dostlar": [
         ("Uyuyan Kedi", "doodle_cat.png"),
         ("Tatlı Tavşan", "doodle_bunny.png"),
+        ("Oyuncak Ayı", "doodle_teddy.png"),
+        ("Shiba Köpek", "animal_shiba.png"),
+        ("Mantar Şapkalı Kurbağa", "animal_frog.png"),
+        ("Uyuyan Panda", "animal_panda.png"),
+        ("Kulaklıklı Penguen", "animal_penguin.png"),
+        ("Kıvrılmış Tilki", "animal_fox.png"),
+        ("Minik Civciv", "animal_chick.png"),
+    ],
+    "📚 Çalışma, Sanat & Lofi": [
+        ("Antika Defter", "study_book.png"),
+        ("Dolma Kalem", "study_pen.png"),
+        ("Boya Paleti", "study_palette.png"),
+        ("Masa Lambası", "study_lamp.png"),
+        ("Mühürlü Mektup", "study_letter.png"),
+        ("Lofi Kaset", "study_cassette.png"),
+    ],
+    "🍓 Taze Meyveler": [
+        ("Çilek", "fruit_strawberry.png"),
+        ("Avokado", "fruit_avocado.png"),
+        ("Şeftali", "fruit_peach.png"),
+    ],
+    "🌙 Gece & Kozmik / İllüstrasyon": [
+        ("Gece Şapkalı Ay", "cosmic_moon.png"),
+        ("Kalp Yağmuru Bulut", "cosmic_cloud.png"),
+        ("Sihirli İksir", "cosmic_potion.png"),
+        ("Pastel Satürn", "cosmic_saturn.png"),
+        ("Kağıt Uçak", "cosmic_plane.png"),
         ("Gülen Yıldız", "doodle_star.png"),
         ("Işıltılar", "doodle_sparkles.png"),
         ("Gökkuşağı", "doodle_rainbow.png"),
         ("Kanatlı Kalp", "doodle_heart.png"),
         ("Fotoğraf Makinesi", "doodle_camera.png"),
-        ("Oyuncak Ayı", "doodle_teddy.png"),
     ]
 }
 
@@ -2467,9 +2508,13 @@ class DailyNoteModal(ctk.CTkToplevel):
             elif getattr(event, "num", 0) == 5:
                 self.canvas.yview_scroll(1, "units")
 
-        self.canvas.bind_all("<MouseWheel>", _on_canvas_wheel)
-        self.canvas.bind_all("<Button-4>", _on_canvas_wheel)
-        self.canvas.bind_all("<Button-5>", _on_canvas_wheel)
+        for w in (self, self.canvas, self.page, self.outer_frame, canvas_container):
+            try:
+                w.bind("<MouseWheel>", _on_canvas_wheel)
+                w.bind("<Button-4>", _on_canvas_wheel)
+                w.bind("<Button-5>", _on_canvas_wheel)
+            except Exception:
+                pass
 
         # 4. Alt Bilgi Çubuğu (Sol: Sticker Butonu · Sağ: Kelime Sayacı)
         stats_bar = ctk.CTkFrame(page, fg_color="transparent")
@@ -2762,11 +2807,12 @@ class DailyNoteModal(ctk.CTkToplevel):
                 if s["angle"] != 0:
                     pil_img = pil_img.rotate(-s["angle"], expand=True, resample=Image.Resampling.BICUBIC)
                 tk_img = ImageTk.PhotoImage(pil_img)
-                self._sticker_cache.append(tk_img)
+                self._active_rot_tk_img = tk_img
                 self.canvas.itemconfigure(tag_name, image=tk_img)
 
         def _end_stk_rot(e):
             self._is_rotating = False
+            self._active_rot_tk_img = None
             self.canvas.config(cursor="hand2")
             self._save_state_quietly()
             self.render_canvas_stickers()
@@ -2835,11 +2881,12 @@ class DailyNoteModal(ctk.CTkToplevel):
             pol_pil = create_tilted_polaroid(img_p, width=w, height=h, angle=item["angle"])
             if pol_pil:
                 tk_img = ImageTk.PhotoImage(pol_pil)
-                self._photo_cache.append(tk_img)
+                self._active_rot_tk_img = tk_img
                 self.canvas.itemconfigure(tag_name, image=tk_img)
 
         def _end_pol_rot(e):
             self._is_rotating = False
+            self._active_rot_tk_img = None
             self.canvas.config(cursor="hand2")
             self._save_state_quietly()
             self.render_canvas_polaroids()
@@ -2863,10 +2910,18 @@ class DailyNoteModal(ctk.CTkToplevel):
             if not self.winfo_exists() or not self.is_today:
                 return
             self._cursor_visible = not getattr(self, "_cursor_visible", True)
-            self.render_canvas_text()
+            self._toggle_cursor()
             self._blink_job = self.after(530, self._blink_cursor)
         except Exception:
             pass
+
+    def _toggle_cursor(self):
+        if not self.winfo_exists() or not hasattr(self, "canvas") or not self.canvas.winfo_exists():
+            return
+        if getattr(self, "_cursor_visible", True) and self.is_today and self.focus_get() == self.textbox:
+            self.canvas.itemconfigure("canvas_cursor", state="normal")
+        else:
+            self.canvas.itemconfigure("canvas_cursor", state="hidden")
 
     def render_canvas_text(self):
         """Metinleri %100 şeffaf olarak defter çizgilerinin tam üzerine çizer."""
@@ -2918,7 +2973,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                                    fill=self._text_color, anchor="sw", tags="notebook_text")
 
         # Yanıp sönen imleç (Sadece bugünün düzenlenebilir sayfasında gösterilir)
-        if getattr(self, "_cursor_visible", True) and self.is_today and self.focus_get() == self.textbox:
+        if self.is_today:
             try:
                 ins_pos = self.textbox.index("insert")
                 ins_row, ins_col = map(int, ins_pos.split("."))
@@ -2949,8 +3004,9 @@ class DailyNoteModal(ctk.CTkToplevel):
                         cursor_x = 48 + self.note_font.measure(last_line)
 
                 cursor_y_base = start_y + (target_disp_idx + 1) * line_h - 1
+                c_state = "normal" if (getattr(self, "_cursor_visible", True) and self.focus_get() == self.textbox) else "hidden"
                 self.canvas.create_line(cursor_x, cursor_y_base - 19, cursor_x, cursor_y_base + 3,
-                                       fill=self._text_color, width=1.5, tags="canvas_cursor")
+                                       fill=self._text_color, width=1.5, tags="canvas_cursor", state=c_state)
             except Exception:
                 pass
 
@@ -3209,7 +3265,6 @@ class DailyNoteModal(ctk.CTkToplevel):
 
     def _import_image_files(self, files, drop_pos=None):
         """Dosya listesini notes_media'ya kopyalar ve canvas üzerine ekler."""
-        import shutil
         os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
         added = False
 
@@ -3285,7 +3340,6 @@ class DailyNoteModal(ctk.CTkToplevel):
             else:
                 self.parent.daily_notes.pop(self.ds, None)
             self.parent.save_data()
-            self.parent.render_table()
         except Exception as e:
             print(f"Sessiz kayıt hatası: {e}")
 
@@ -3334,12 +3388,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             except Exception:
                 pass
             self._blink_job = None
-        try:
-            self.canvas.unbind_all("<MouseWheel>")
-            self.canvas.unbind_all("<Button-4>")
-            self.canvas.unbind_all("<Button-5>")
-        except Exception:
-            pass
+        self._active_rot_tk_img = None
         super().destroy()
 
 
@@ -4074,6 +4123,12 @@ class SettingsWindow(ctk.CTkToplevel):
                 self.gemini_box.pack_forget()
 
     def on_gemini_key_change(self):
+        if hasattr(self, "_gemini_save_job") and self._gemini_save_job:
+            self.after_cancel(self._gemini_save_job)
+        self._gemini_save_job = self.after(500, self._save_gemini_key)
+
+    def _save_gemini_key(self):
+        self._gemini_save_job = None
         try:
             if hasattr(self, "gemini_key_entry") and self.gemini_key_entry.winfo_exists():
                 val = self.gemini_key_entry.get().strip()
@@ -4103,10 +4158,10 @@ class SettingsWindow(ctk.CTkToplevel):
             return
         self.gemini_status_lbl.configure(text="⏳ Bağlanıyor...", text_color=self.parent.get_theme()["text_secondary"])
         self.gemini_test_btn.configure(state="disabled")
+        cur_model = self.model_var.get()
 
         def _test():
             try:
-                cur_model = self.model_var.get()
                 ans = query_gemini(key, cur_model, "Kısaca 'Tamam' yaz.")
                 def _done():
                     if not self.winfo_exists():
@@ -4344,7 +4399,6 @@ class HabitTrackerApp(_AppBase):
         self.setup_charts()
         self.apply_theme(mode_changed=False)
         self.update_clock()
-        self.update_charts()
         self.update_progress()
 
         # Sistem Tepsisi & Arka Plan AI Darlama Döngüsü
@@ -4354,10 +4408,6 @@ class HabitTrackerApp(_AppBase):
         self.check_ai_notifications()
 
     # ---------- VERİ YÖNETİMİ ----------
-    def _cleanup_orphaned_media(self):
-        """Kullanıcının fotoğraf ve anılarını her zaman güvende tutmak için otomatik silme yapılmaz."""
-        pass
-
     def load_data(self):
         loaded = False
         if os.path.exists(DATA_FILE):
@@ -4396,9 +4446,6 @@ class HabitTrackerApp(_AppBase):
                         self.settings = data.get("settings", self.settings)
                 except Exception:
                     pass
-
-        # Sahipsiz medya dosyalarını temizle (Storage Cleanup)
-        self._cleanup_orphaned_media()
 
     def save_data(self):
         self._max_streak_dirty = True
@@ -4510,11 +4557,6 @@ class HabitTrackerApp(_AppBase):
         self.records[ds][task_name] = new_val
         self.save_data()
         return new_val, is_completed
-
-    def set_task_state(self, date_obj, task_name, value):
-        ds = date_obj.strftime("%Y-%m-%d")
-        self.records.setdefault(ds, {})[task_name] = value
-        self.save_data()
 
     def set_score(self, date_obj, score_type, value):
         ds = date_obj.strftime("%Y-%m-%d")
@@ -5974,6 +6016,10 @@ class HabitTrackerApp(_AppBase):
                 self.tray_icon.stop()
             except Exception:
                 pass
+        try:
+            SoundEngine.close_all()
+        except Exception:
+            pass
         try:
             plt.close("all")
         except Exception:
