@@ -106,7 +106,7 @@ Uygulama Windows için yazıldı, ancak `MacOS/` klasöründeki başlatıcı say
 
 **A) Hazır uygulama (.dmg ile kurulum — önerilen)**
 
-1. `Lofi-ToDo-HabitTracker.dmg` dosyasını açın, uygulamayı **Applications** klasörüne sürükleyin.
+1. Hazır kurulum dosyası repoda: **[`dist/Lofi-ToDo-HabitTracker.dmg`](dist/Lofi-ToDo-HabitTracker.dmg)** (~11 MB). İndirip açın ve uygulamayı **Applications** klasörüne sürükleyin.
 2. İlk açılışta macOS "geliştirici doğrulanamadı" diyebilir (imzasız uygulama): uygulamaya **sağ tıklayıp → Aç** deyin.
 3. İlk açılış, bilgisayarınızdaki Python 3 ile kendi sanal ortamını kurar (birkaç dakika); sonrakiler anındadır.
    Tkinter destekli bir Python 3 gerekir: [python.org](https://www.python.org/downloads/macos/).
