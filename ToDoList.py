@@ -2621,7 +2621,7 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         if not self._sticker_popup:
             self._sticker_popup = ctk.CTkFrame(
-                self.page, width=390, height=270, corner_radius=16,
+                self.page, width=390, height=330, corner_radius=16,
                 border_width=2, border_color=paper_border, fg_color=paper_bg
             )
 
@@ -2629,7 +2629,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             p_head.pack(fill="x", padx=12, pady=(8, 4))
 
             ctk.CTkLabel(
-                p_head, text="🎨  El Çizimi Çıkartma Paleti",
+                p_head, text="🎨  El Çizimi Çıkartma Paleti (100 Çıkartma)",
                 font=ctk.CTkFont(family="Georgia", size=12, weight="bold"),
                 text_color=text_color
             ).pack(side="left")
@@ -2641,42 +2641,43 @@ class DailyNoteModal(ctk.CTkToplevel):
                 command=lambda: (play_button_sound(), self._sticker_popup.place_forget())
             ).pack(side="right")
 
-            scroll_stk = ctk.CTkScrollableFrame(self._sticker_popup, fg_color="transparent", height=200)
+            scroll_stk = ctk.CTkScrollableFrame(self._sticker_popup, fg_color="transparent", width=360, height=260)
             scroll_stk.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
             for cat_name, items in STICKER_CATALOG.items():
+                cat_header = ctk.CTkFrame(scroll_stk, fg_color="transparent")
+                cat_header.pack(fill="x", padx=4, pady=(8, 2))
                 ctk.CTkLabel(
-                    scroll_stk, text=cat_name, font=ctk.CTkFont(size=11, weight="bold"),
+                    cat_header, text=f"{cat_name} ({len(items)})", font=ctk.CTkFont(size=11, weight="bold"),
                     text_color=text_color
-                ).pack(anchor="w", padx=4, pady=(6, 2))
+                ).pack(side="left")
 
-                grid_row = ctk.CTkFrame(scroll_stk, fg_color="transparent")
-                grid_row.pack(fill="x", padx=2, pady=2)
+                current_row_frame = ctk.CTkFrame(scroll_stk, fg_color="transparent")
+                current_row_frame.pack(fill="x", padx=4, pady=2)
 
                 col = 0
-                current_row_frame = grid_row
                 for name, fname in items:
                     fpath = os.path.join(STICKERS_DIR, fname)
                     if os.path.exists(fpath):
                         try:
                             pil_thumb = Image.open(fpath).convert("RGBA")
-                            ctk_img = ctk.CTkImage(light_image=pil_thumb, dark_image=pil_thumb, size=(38, 38))
+                            ctk_img = ctk.CTkImage(light_image=pil_thumb, dark_image=pil_thumb, size=(40, 40))
                             self._sticker_thumbs.append(ctk_img)
 
                             btn = ctk.CTkButton(
-                                current_row_frame, image=ctk_img, text="", width=44, height=44,
+                                current_row_frame, image=ctk_img, text="", width=48, height=48,
                                 corner_radius=10, fg_color="transparent", hover_color=paper_border,
                                 command=lambda f=fname: self.add_sticker(f)
                             )
-                            btn.pack(side="left", padx=3, pady=3)
+                            btn.pack(side="left", padx=4, pady=3)
                             col += 1
-                            if col % 7 == 0:
+                            if col % 5 == 0 and col < len(items):
                                 current_row_frame = ctk.CTkFrame(scroll_stk, fg_color="transparent")
-                                current_row_frame.pack(fill="x", padx=2, pady=2)
+                                current_row_frame.pack(fill="x", padx=4, pady=2)
                         except Exception as err:
                             print(f"Sticker yükleme hatası: {err}")
 
-        self._sticker_popup.place(x=16, y=self.page.winfo_height() - 340)
+        self._sticker_popup.place(x=16, y=max(10, self.page.winfo_height() - 365))
         self._sticker_popup.lift()
 
     def add_sticker(self, sticker_file):
