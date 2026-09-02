@@ -1844,6 +1844,7 @@ class StickyWidget(ctk.CTkToplevel):
             scrollbar_button_color=theme["btn_primary"],
             scrollbar_button_hover_color=theme["btn_primary_hover"]
         )
+        self.task_rows = {}
         self.render_tasks()
         self.after(10, self.apply_round_corners)
 
@@ -2798,9 +2799,27 @@ class SettingsWindow(ctk.CTkToplevel):
 
         t = self.parent.get_theme()
         self.configure(fg_color=t["bg"])
-        self.tabview.configure(fg_color=t["card"],
-                               segmented_button_selected_color=t["btn_primary"],
-                               segmented_button_selected_hover_color=t["btn_primary_hover"])
+        self.tabview.configure(
+            fg_color=t["card"],
+            segmented_button_selected_color=t["btn_primary"],
+            segmented_button_selected_hover_color=t["btn_primary_hover"],
+            segmented_button_fg_color=t["card_alt"],
+            segmented_button_unselected_color=t["card_alt"],
+            segmented_button_unselected_hover_color=t["btn_primary_hover"],
+            text_color=t["text"]
+        )
+
+        # Diğer sekmelerin içeriğini yeni temayla canlı yenile
+        for w in self.tab_tasks.winfo_children():
+            w.destroy()
+        for w in self.tab_sound.winfo_children():
+            w.destroy()
+        for w in self.tab_ai.winfo_children():
+            w.destroy()
+
+        self.setup_tasks_tab(t)
+        self.setup_sound_tab(t)
+        self.setup_ai_notifications_tab(t)
 
     # ---------- SES SEÇİMİ (GÖREV, BUTON & BİLDİRİM AYRI) ----------
     def setup_sound_tab(self, theme):
@@ -3878,7 +3897,7 @@ class HabitTrackerApp(_AppBase):
         xp_badge = ctk.CTkFrame(card, fg_color=theme["card_alt"], corner_radius=8)
         xp_badge.pack(pady=4)
         ctk.CTkLabel(xp_badge, text="⭐ +50 Bonus XP Kazanıldı!", font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color=theme.get("moral_color", "#D98A48")).pack(padx=14, pady=4)
+                     text_color=theme.get("progress_fg", theme.get("today_header", theme["btn_primary"]))).pack(padx=14, pady=4)
 
         ctk.CTkButton(card, text="Harika!", width=110, height=30, corner_radius=10,
                       fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
