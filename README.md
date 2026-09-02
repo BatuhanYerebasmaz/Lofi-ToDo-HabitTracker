@@ -100,6 +100,41 @@ Uygulama **akıllı otomatik kurulum (self-healing)** desteğine sahiptir:
    python ToDoList.py
    ```
 
+### 🍎 macOS Kurulumu
+
+Uygulama Windows için yazıldı, ancak `MacOS/` klasöründeki başlatıcı sayesinde **ana kaynak koda tek satır dokunmadan** macOS'ta da çalışır.
+
+**A) Hazır uygulama (.dmg ile kurulum — önerilen)**
+
+1. `Lofi-ToDo-HabitTracker.dmg` dosyasını açın, uygulamayı **Applications** klasörüne sürükleyin.
+2. İlk açılışta macOS "geliştirici doğrulanamadı" diyebilir (imzasız uygulama): uygulamaya **sağ tıklayıp → Aç** deyin.
+3. İlk açılış, bilgisayarınızdaki Python 3 ile kendi sanal ortamını kurar (birkaç dakika); sonrakiler anındadır.
+   Tkinter destekli bir Python 3 gerekir: [python.org](https://www.python.org/downloads/macos/).
+
+Verileriniz `~/Library/Application Support/Lofi-ToDo-HabitTracker/data` altında tutulur — uygulamayı silmek veriyi silmez.
+
+**B) Kaynaktan çalıştırma (geliştirme)**
+
+1. **`MacOS/Baslat.command`** dosyasına çift tıklayın.
+   - İlk açılışta kendi sanal ortamını (`MacOS/.venv`) kurar ve bağımlılıkları indirir (1-2 dk), sonraki açılışlar anındadır.
+   - Veriler bu modda proje içindeki `data/` klasöründe kalır.
+
+**C) Release paketi üretme**
+
+```bash
+bash MacOS/build_release.command      # -> dist/Lofi-ToDo-HabitTracker.app + .dmg (~11 MB)
+```
+İkonu yeniden çizmek için: `MacOS/.venv/bin/python MacOS/make_app_icon.py`
+
+**Başlatıcı ne yapıyor?** Çalışma anında şu macOS uyarlamalarını yapar (dosyaya yazmaz, yalnızca bellekte):
+   - **Ses:** Windows `winsound`/`winmm` yerine sahte modül + `afplay`.
+   - **Görsel açma:** `os.startfile` yerine macOS `open` komutu.
+   - **Sistem tepsisi:** `pystray` macOS'ta ana iş parçacığı dışında çalışamadığı için tepsi kapatılır; pencereyi kapatmak uygulamayı **Dock'a küçültür**.
+   - **Kimlik:** python.org derlemesi menü çubuğunda "Python" yazdığı için uygulama adı ve Dock ikonu `NSBundle` üzerinden düzeltilir.
+   - **Mimari:** universal2 Python bazen Rosetta (x86_64) ile açılıp arm64 paketlerini yükleyemediği için başlatıcı native mimariyi zorlar.
+
+macOS'ta devre dışı kalan Windows'a özgü özellikler: global `Ctrl+Shift+T` kısayolu, köşe yuvarlatma (DWM API) ve `.ico` başlık simgesi.
+
 ---
 
 ## 📂 Proje Yapısı
@@ -110,8 +145,14 @@ ToDo/
 ├── sounds/                  # 20 adet lofi ve mekanik ses efektleri (.wav)
 ├── data/                    # Görev, sayaç ve ayar veritabanı (data.json)
 │   └── notes_media/         # Defter sayfalarına eklenen fotoğraflar ve polaroidler
+├── MacOS/                   # macOS desteği (ana kodu değiştirmez)
+│   ├── Baslat.command       # Kaynaktan çift tıkla başlat (venv kurar + açar)
+│   ├── build_release.command# .app + .dmg release paketi üretir -> dist/
+│   ├── make_app_icon.py     # 1024px uygulama ikonu (AppIcon.icns) üreticisi
+│   ├── AppIcon.icns         # Uygulama ikonu
+│   └── mac_launcher.py      # winsound stub + afplay/open/tepsi/veri yamaları
 ├── ToDoList.py              # Ana uygulama kaynak kodu
-├── baslat.bat               # Hızlı başlatma betiği
+├── baslat.bat               # Hızlı başlatma betiği (Windows)
 ├── Kısayol Oluşturucu.vbs   # Evrensel Unicode masaüstü kısayol oluşturucu
 ├── requirements.txt         # Python kütüphane bağımlılıkları
 ├── .gitignore               # Git dışlama kuralları
