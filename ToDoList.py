@@ -2708,7 +2708,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             if not getattr(self, "_is_rotating", False):
                 return
             dx = e.x_root - getattr(self, "_rot_start_x", e.x_root)
-            new_angle = (getattr(self, "_rot_start_item_angle", 0) + dx * 0.75) % 360
+            new_angle = (getattr(self, "_rot_start_item_angle", 0) - dx * 0.75) % 360
             if new_angle > 180:
                 new_angle -= 360
             s["angle"] = round(new_angle, 1)
@@ -2786,7 +2786,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             if not getattr(self, "_is_rotating", False):
                 return
             dx = e.x_root - getattr(self, "_rot_start_x", e.x_root)
-            new_angle = (getattr(self, "_rot_start_item_angle", 0) + dx * 0.75) % 360
+            new_angle = (getattr(self, "_rot_start_item_angle", 0) - dx * 0.75) % 360
             if new_angle > 180:
                 new_angle -= 360
             item["angle"] = round(new_angle, 1)
