@@ -2332,9 +2332,9 @@ class DailyNoteModal(ctk.CTkToplevel):
         # Sol Kırmızı Margin Çizgisi
         self.canvas.create_line(42, 10, 42, 2400, fill=margin_color, width=2, tags="margin_line")
 
-        # Metin Alanı (Dinamik Yükseklikli Canvas Window İçinde - Geniş Yazı Alanı)
-        txt_lines = max(5, len(self.note_text.split("\n")) + 1) if self.note_text else 5
-        initial_txt_h = max(160, txt_lines * 28 + 10)
+        # Metin Alanı (Sadece yazılan satır kadar dinamik yükseklik - asla boş defteri veya fotoğrafları kapatmaz)
+        txt_lines = max(1, len(self.note_text.split("\n"))) if self.note_text else 1
+        initial_txt_h = max(30, txt_lines * 28 + 4)
         txt_container = tk.Frame(self.canvas, bg=paper_bg)
         self.textbox = ctk.CTkTextbox(
             txt_container, width=515, height=initial_txt_h, fg_color=paper_bg, border_width=0,
@@ -2347,7 +2347,7 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.txt_win_id = self.canvas.create_window(48, 16, anchor="nw", window=txt_container, width=515, height=initial_txt_h)
 
-        # Tuval üzerine boş bir yere tıklandığında metin kutusuna odaklan
+        # Tuval üzerine boş bir yere tıklandığında metin kutusunun sonuna odaklan
         def _on_canvas_click(event):
             clicked = self.canvas.find_withtag("current")
             tags = set()
@@ -2355,6 +2355,11 @@ class DailyNoteModal(ctk.CTkToplevel):
                 tags.update(self.canvas.gettags(cid))
             if not (tags & {"polaroid_item", "sticker_item", "pol_ctrl", "stk_ctrl", "pol_del", "pol_rot", "stk_del", "stk_rot"}):
                 self.textbox.focus_set()
+                try:
+                    if hasattr(self.textbox, "_textbox"):
+                        self.textbox._textbox.mark_set("insert", "end-1c")
+                except Exception:
+                    pass
 
         self.canvas.bind("<Button-1>", _on_canvas_click, add="+")
 
@@ -2781,7 +2786,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         try:
             txt = self.textbox.get("1.0", "end-1c")
             num_lines = max(1, len(txt.split("\n"))) if txt else 1
-            txt_h = max(35, num_lines * 28 + 10)
+            txt_h = max(30, num_lines * 28 + 4)
             self.textbox.configure(height=txt_h)
             self.canvas.itemconfigure(self.txt_win_id, height=txt_h)
 
