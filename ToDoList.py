@@ -2144,21 +2144,30 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.note_images = []
         for idx, item in enumerate(raw_imgs):
             if isinstance(item, str):
-                if os.path.exists(item):
-                    self.note_images.append({
-                        "path": item,
-                        "x": None,
-                        "y": None,
-                        "width": 135,
-                        "angle": self._ANGLES[idx % len(self._ANGLES)]
-                    })
+                p = item
+                if not os.path.exists(p) and os.path.basename(p):
+                    alt_p = os.path.join(NOTES_MEDIA_DIR, os.path.basename(p))
+                    if os.path.exists(alt_p):
+                        p = alt_p
+                self.note_images.append({
+                    "path": p,
+                    "x": None,
+                    "y": None,
+                    "width": 135,
+                    "angle": self._ANGLES[idx % len(self._ANGLES)]
+                })
             elif isinstance(item, dict) and "path" in item:
-                if os.path.exists(item["path"]):
-                    if "angle" not in item or item["angle"] is None:
-                        item["angle"] = self._ANGLES[idx % len(self._ANGLES)]
-                    if "width" not in item or item["width"] is None:
-                        item["width"] = 135
-                    self.note_images.append(item)
+                d_item = dict(item)
+                p = d_item.get("path", "")
+                if not os.path.exists(p) and os.path.basename(p):
+                    alt_p = os.path.join(NOTES_MEDIA_DIR, os.path.basename(p))
+                    if os.path.exists(alt_p):
+                        d_item["path"] = alt_p
+                if "angle" not in d_item or d_item["angle"] is None:
+                    d_item["angle"] = self._ANGLES[idx % len(self._ANGLES)]
+                if "width" not in d_item or d_item["width"] is None:
+                    d_item["width"] = 135
+                self.note_images.append(d_item)
 
         # Çıkartmaları normalize et
         self.note_stickers = []
@@ -4346,25 +4355,8 @@ class HabitTrackerApp(_AppBase):
 
     # ---------- VERİ YÖNETİMİ ----------
     def _cleanup_orphaned_media(self):
-        """Silinmiş notlardan arta kalan sahipsiz fotoğrafları diskten temizler."""
-        try:
-            used_images = set()
-            for n_val in getattr(self, "daily_notes", {}).values():
-                if isinstance(n_val, dict):
-                    for p in n_val.get("images", []):
-                        p_str = p.get("path") if isinstance(p, dict) else p
-                        if p_str:
-                            used_images.add(os.path.normpath(str(p_str)))
-            if os.path.exists(NOTES_MEDIA_DIR):
-                for f_name in os.listdir(NOTES_MEDIA_DIR):
-                    f_path = os.path.normpath(os.path.join(NOTES_MEDIA_DIR, f_name))
-                    if os.path.isfile(f_path) and f_path not in used_images:
-                        try:
-                            os.remove(f_path)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+        """Kullanıcının fotoğraf ve anılarını her zaman güvende tutmak için otomatik silme yapılmaz."""
+        pass
 
     def load_data(self):
         loaded = False
