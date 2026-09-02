@@ -2617,7 +2617,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._update_scroll_region()
 
     def _show_sticker_controls(self, s, sw, sh):
-        """Çıkartma üzerine gelindiğinde mini kontrolleri sabit 4 köşede (dönmeden) çizer."""
+        """Çıkartma üzerine gelindiğinde mini kontrolleri (Sil & Döndür) sabit köşelerde çizer."""
         self.canvas.delete("stk_ctrl")
         cx = s.get("x", 200)
         cy = s.get("y", 200)
@@ -2626,10 +2626,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         hh = max(28, stk_sz // 2 + 10)
 
         r = 10
-        tr_x, tr_y = cx + hw, cy - hh  # Sağ Üst: ✕
-        tl_x, tl_y = cx - hw, cy - hh  # Sol Üst: 🔄
-        br_x, br_y = cx + hw, cy + hh  # Sağ Alt: ➕
-        bl_x, bl_y = cx - hw, cy + hh  # Sol Alt: ➖
+        tr_x, tr_y = cx + hw, cy - hh  # Sağ Üst: ✕ (Sil)
+        tl_x, tl_y = cx - hw, cy - hh  # Sol Üst: 🔄 (Döndür)
 
         # 1. Sağ Üst: Kırmızı Sil (✕)
         self.canvas.create_oval(tr_x - r, tr_y - r, tr_x + r, tr_y + r,
@@ -2643,18 +2641,6 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.canvas.create_text(tl_x, tl_y, text="🔄", font=("Segoe UI", 6, "bold"),
                                 fill="#FFFFFF", tags=("stk_ctrl", "stk_rot", "stk_rot_txt"))
 
-        # 3. Sağ Alt: Yeşil Büyüt (➕)
-        self.canvas.create_oval(br_x - r, br_y - r, br_x + r, br_y + r,
-                                fill="#10B981", outline="#059669", width=1, tags=("stk_ctrl", "stk_plus", "stk_plus_oval"))
-        self.canvas.create_text(br_x, br_y, text="➕", font=("Segoe UI", 7, "bold"),
-                                fill="#FFFFFF", tags=("stk_ctrl", "stk_plus", "stk_plus_txt"))
-
-        # 4. Sol Alt: Gri Küçült (➖)
-        self.canvas.create_oval(bl_x - r, bl_y - r, bl_x + r, bl_y + r,
-                                fill="#6B7280", outline="#4B5563", width=1, tags=("stk_ctrl", "stk_minus", "stk_minus_oval"))
-        self.canvas.create_text(bl_x, bl_y, text="➖", font=("Segoe UI", 7, "bold"),
-                                fill="#FFFFFF", tags=("stk_ctrl", "stk_minus", "stk_minus_txt"))
-
         idx_s = self.note_stickers.index(s) if s in self.note_stickers else 0
         tag_name = f"stk_{idx_s}"
         s_file = s.get("file", "")
@@ -2664,12 +2650,6 @@ class DailyNoteModal(ctk.CTkToplevel):
             play_button_sound()
             if cur_s in self.note_stickers:
                 self.note_stickers.remove(cur_s)
-            self._save_state_quietly()
-            self.render_canvas_stickers()
-
-        def _res_stk(delta, cur_s=s):
-            play_button_sound()
-            cur_s["size"] = max(25, min(220, cur_s.get("size", 75) + delta))
             self._save_state_quietly()
             self.render_canvas_stickers()
 
@@ -2710,18 +2690,15 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.render_canvas_stickers()
 
         self.canvas.tag_bind("stk_del", "<Button-1>", lambda e: _del_stk())
-        self.canvas.tag_bind("stk_plus", "<Button-1>", lambda e: _res_stk(14))
-        self.canvas.tag_bind("stk_minus", "<Button-1>", lambda e: _res_stk(-14))
-
         self.canvas.tag_bind("stk_rot", "<Button-1>", _start_stk_rot)
         self.canvas.tag_bind("stk_rot", "<B1-Motion>", _drag_stk_rot)
         self.canvas.tag_bind("stk_rot", "<ButtonRelease-1>", _end_stk_rot)
 
-        for tag in ("stk_del", "stk_rot", "stk_plus", "stk_minus"):
+        for tag in ("stk_del", "stk_rot"):
             self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
     def _show_polaroid_controls(self, item, pw, ph):
-        """Polaroid fotoğraf üzerine gelindiğinde mini kontrolleri sabit 4 köşede (dönmeden) çizer."""
+        """Polaroid fotoğraf üzerine gelindiğinde mini kontrolleri (Sil & Döndür) sabit köşelerde çizer."""
         self.canvas.delete("pol_ctrl")
         cx = item.get("x", 200)
         cy = item.get("y", 200)
@@ -2731,10 +2708,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         hh = max(45, int(h_cur * 0.54)) + 12
 
         r = 11
-        tr_x, tr_y = cx + hw, cy - hh  # Sağ Üst: ✕
-        tl_x, tl_y = cx - hw, cy - hh  # Sol Üst: 🔄
-        br_x, br_y = cx + hw, cy + hh  # Sağ Alt: ➕
-        bl_x, bl_y = cx - hw, cy + hh  # Sol Alt: ➖
+        tr_x, tr_y = cx + hw, cy - hh  # Sağ Üst: ✕ (Sil)
+        tl_x, tl_y = cx - hw, cy - hh  # Sol Üst: 🔄 (Döndür)
 
         # 1. Sağ Üst: Kırmızı Sil (✕)
         self.canvas.create_oval(tr_x - r, tr_y - r, tr_x + r, tr_y + r,
@@ -2748,18 +2723,6 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.canvas.create_text(tl_x, tl_y, text="🔄", font=("Segoe UI", 7, "bold"),
                                 fill="#FFFFFF", tags=("pol_ctrl", "pol_rot", "pol_rot_txt"))
 
-        # 3. Sağ Alt: Yeşil Büyüt (➕)
-        self.canvas.create_oval(br_x - r, br_y - r, br_x + r, br_y + r,
-                                fill="#10B981", outline="#059669", width=1, tags=("pol_ctrl", "pol_plus", "pol_plus_oval"))
-        self.canvas.create_text(br_x, br_y, text="➕", font=("Segoe UI", 8, "bold"),
-                                fill="#FFFFFF", tags=("pol_ctrl", "pol_plus", "pol_plus_txt"))
-
-        # 4. Sol Alt: Gri Küçült (➖)
-        self.canvas.create_oval(bl_x - r, bl_y - r, bl_x + r, bl_y + r,
-                                fill="#6B7280", outline="#4B5563", width=1, tags=("pol_ctrl", "pol_minus", "pol_minus_oval"))
-        self.canvas.create_text(bl_x, bl_y, text="➖", font=("Segoe UI", 8, "bold"),
-                                fill="#FFFFFF", tags=("pol_ctrl", "pol_minus", "pol_minus_txt"))
-
         img_p = item.get("path")
         idx_p = self.note_images.index(item) if item in self.note_images else 0
         tag_name = f"pol_{idx_p}"
@@ -2767,13 +2730,6 @@ class DailyNoteModal(ctk.CTkToplevel):
         def _del_pol():
             play_button_sound()
             self.remove_image(img_p)
-
-        def _res_pol(delta):
-            play_button_sound()
-            w = max(75, min(340, item.get("width", 140) + delta))
-            item["width"] = w
-            self._save_state_quietly()
-            self.render_canvas_polaroids()
 
         # İnteraktif Canlı Döndürme (Basılı tutup fareyi sağa/sola hareket ettirerek kesintisiz çevirme)
         def _start_pol_rot(e):
@@ -2807,20 +2763,11 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.render_canvas_polaroids()
 
         self.canvas.tag_bind("pol_del", "<Button-1>", lambda e: _del_pol())
-        self.canvas.tag_bind("pol_plus", "<Button-1>", lambda e: _res_pol(15))
-        self.canvas.tag_bind("pol_minus", "<Button-1>", lambda e: _res_pol(-15))
-
-        self.canvas.tag_bind("pol_rot", "<Button-1>", _start_pol_rot)
-        self.canvas.tag_bind("pol_rot", "<B1-Motion>", _drag_pol_rot)
-        self.canvas.tag_bind("pol_del", "<Button-1>", lambda e: _del_pol())
-        self.canvas.tag_bind("pol_plus", "<Button-1>", lambda e: _res_pol(15))
-        self.canvas.tag_bind("pol_minus", "<Button-1>", lambda e: _res_pol(-15))
-
         self.canvas.tag_bind("pol_rot", "<Button-1>", _start_pol_rot)
         self.canvas.tag_bind("pol_rot", "<B1-Motion>", _drag_pol_rot)
         self.canvas.tag_bind("pol_rot", "<ButtonRelease-1>", _end_pol_rot)
 
-        for tag in ("pol_del", "pol_rot", "pol_plus", "pol_minus"):
+        for tag in ("pol_del", "pol_rot"):
             self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
     def _update_scroll_region(self):
