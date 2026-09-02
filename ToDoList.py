@@ -2023,7 +2023,7 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
 
 
 class DailyNoteModal(ctk.CTkToplevel):
-    """Tek Yapraklı Defter & Açılı Polaroid Fotoğraflı Sevimli Günlük Sayfası."""
+    """Gerçek Defter Hissiyatlı & Serbest Sürüklenebilir Polaroidli Lofi Scrapbook Günlük Sayfası."""
     CURRENT_INSTANCE = None
     _ANGLES = [-4, 3, -3, 5, -2, 4, -5]
 
@@ -2048,21 +2048,38 @@ class DailyNoteModal(ctk.CTkToplevel):
         raw_data = parent.daily_notes.get(self.ds, {})
         if isinstance(raw_data, dict):
             self.note_text = raw_data.get("text", "")
-            self.note_images = list(raw_data.get("images", []))
+            raw_imgs = raw_data.get("images", [])
         else:
             self.note_text = str(raw_data)
-            self.note_images = []
+            raw_imgs = []
+
+        # Fotoğrafları dict formatına normalize et
+        self.note_images = []
+        for idx, item in enumerate(raw_imgs):
+            if isinstance(item, str):
+                if os.path.exists(item):
+                    self.note_images.append({
+                        "path": item,
+                        "x": None,
+                        "y": None,
+                        "angle": self._ANGLES[idx % len(self._ANGLES)]
+                    })
+            elif isinstance(item, dict) and "path" in item:
+                if os.path.exists(item["path"]):
+                    if "angle" not in item or item["angle"] is None:
+                        item["angle"] = self._ANGLES[idx % len(self._ANGLES)]
+                    self.note_images.append(item)
 
         self.title("📖 Günün Defter Sayfası" if self.is_today else "📖 Defter Arşivi")
 
         px, py = 100, 100
         try:
-            px = parent.winfo_x() + (parent.winfo_width() - 640) // 2
-            py = parent.winfo_y() + (parent.winfo_height() - 700) // 2
+            px = parent.winfo_x() + (parent.winfo_width() - 660) // 2
+            py = parent.winfo_y() + (parent.winfo_height() - 720) // 2
         except Exception:
             pass
 
-        self.geometry(f"640x700+{max(20, px)}+{max(20, py)}")
+        self.geometry(f"660x720+{max(20, px)}+{max(20, py)}")
         self.resizable(False, False)
         self.overrideredirect(True)
         self.attributes("-topmost", True)
@@ -2070,6 +2087,8 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self._drag_start_x = 0
         self._drag_start_y = 0
+        self._polaroid_widgets = []
+        self._photo_cache = []
 
         self.setup_ui()
         self.after(5, self.apply_round_corners)
@@ -2081,13 +2100,16 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.bind("<Control-s>", lambda e: self.save_note())
             self.setup_drag_drop()
 
+        # İlk açılışta polaroidleri yerleştir
+        self.after(60, self.render_polaroids)
+
     def apply_round_corners(self):
         """Pencere ve tüm üst taşıyıcı katmanlarının köşelerini Windows GDI ile pürüzsüz yuvarlatır."""
         try:
             w = self.winfo_width()
             h = self.winfo_height()
             if w <= 10 or h <= 10:
-                w, h = 640, 700
+                w, h = 660, 720
             r = 36  # Yumuşak kavis yarıçapı
             child_hwnd = self.winfo_id()
             if child_hwnd:
@@ -2113,26 +2135,25 @@ class DailyNoteModal(ctk.CTkToplevel):
         wd = self.date_obj.weekday()
         formatted_date = f"{self.date_obj.day} {TURKISH_MONTHS.get(self.date_obj.month, '')} {self.date_obj.year}, {TURKISH_DAYS[wd]}"
 
-        # Defter Sayfası Renk Paleti (Kraft / Fildişi Kağıt & Pastel Tonlar)
+        # Defter Sayfası Renk Paleti
         paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
         paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
         text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
         sub_text_color = "#7D6B5D" if not self.is_dark else "#A8988B"
         margin_color = "#F0C4B4" if not self.is_dark else "#543C30"
-        tape_color = "#E8C2A8" if not self.is_dark else "#4F3C32"
 
         # Dış Defter Alanı
         self.outer_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.outer_frame.pack(fill="both", expand=True, padx=12, pady=12)
 
-        # 1. Sol Spiral Şeridi (Defter Telleri)
+        # 1. Sol Spiral Şeridi
         self.spiral_canvas = tk.Canvas(
             self.outer_frame, width=28, bg=self.theme["bg"], highlightthickness=0
         )
         self.spiral_canvas.pack(side="left", fill="y", padx=(0, 2))
         self.draw_spiral_rings()
 
-        # 2. Tek Yapraklı Defter Sayfası (Notebook Sheet)
+        # 2. Tek Yapraklı Defter Sayfası (Notebook Scrapbook Sheet)
         self.page = ctk.CTkFrame(
             self.outer_frame, fg_color=paper_bg, corner_radius=16,
             border_width=2, border_color=paper_border
@@ -2140,14 +2161,9 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.page.pack(side="left", fill="both", expand=True)
         page = self.page
 
-        # Üstte Sevimli Washi Tape (Dekoratif Bant)
-        tape_canvas = tk.Canvas(page, width=90, height=10, bg=paper_bg, highlightthickness=0)
-        tape_canvas.pack(pady=(4, 0))
-        tape_canvas.create_rectangle(0, 0, 90, 8, fill=tape_color, outline="")
-
-        # Sayfa İçi Üst Başlık (Tarih & Kapatma Butonu & Fotoğraf Butonu)
+        # Sayfa İçi Üst Başlık
         head = ctk.CTkFrame(page, fg_color="transparent")
-        head.pack(fill="x", padx=16, pady=(4, 4))
+        head.pack(fill="x", padx=16, pady=(12, 4))
 
         title_box = ctk.CTkFrame(head, fg_color="transparent")
         title_box.pack(side="left")
@@ -2158,13 +2174,6 @@ class DailyNoteModal(ctk.CTkToplevel):
             text_color=text_color
         ).pack(anchor="w")
 
-        ctk.CTkLabel(
-            title_box, text="📖  Defter Sayfası & Günlük Anıları",
-            font=ctk.CTkFont(size=10, slant="italic"),
-            text_color=sub_text_color
-        ).pack(anchor="w")
-
-        # Sağ Üst Aksiyon Alanı (Fotoğraf Butonu & Özel Kapatma Çarpısı)
         action_box = ctk.CTkFrame(head, fg_color="transparent")
         action_box.pack(side="right")
 
@@ -2179,12 +2188,13 @@ class DailyNoteModal(ctk.CTkToplevel):
         if self.is_today:
             ctk.CTkButton(
                 action_box, text="📷 + Fotoğraf Ekle", width=120, height=28, corner_radius=8,
-                fg_color=theme["btn_settings"], hover_color=theme["btn_settings_hover"],
+                fg_color=theme.get("btn_primary", theme.get("btn_settings", "#B0D2AF")),
+                hover_color=theme.get("btn_primary_hover", theme.get("btn_settings_hover", "#92BF91")),
                 text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
                 command=lambda: (play_button_sound(), self.add_image())
             ).pack(side="right", padx=(0, 8))
 
-        # Pencereyi Başlıktan/Sayfadan Sürükleme Desteği (Drag & Move)
+        # Pencereyi Başlıktan Sürükleme Desteği
         def _start_drag(event):
             self._drag_start_x = event.x_root - self.winfo_x()
             self._drag_start_y = event.y_root - self.winfo_y()
@@ -2194,7 +2204,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             y = event.y_root - self._drag_start_y
             self.geometry(f"+{x}+{y}")
 
-        for w in [self.outer_frame, self.page, head, title_box, tape_canvas]:
+        for w in [self.outer_frame, head]:
             try:
                 w.bind("<Button-1>", _start_drag, add="+")
                 w.bind("<B1-Motion>", _do_drag, add="+")
@@ -2205,42 +2215,21 @@ class DailyNoteModal(ctk.CTkToplevel):
         margin_line = ctk.CTkFrame(page, height=1, fg_color=margin_color)
         margin_line.pack(fill="x", padx=16, pady=(4, 6))
 
-        # 4. Polaroid / Fotoğraflar Panosu (Scrapbook Board)
-        self.photo_canvas = tk.Canvas(
-            page, height=125, bg=paper_bg, highlightthickness=0
-        )
-        self.photo_canvas.pack(fill="x", padx=14, pady=(0, 6))
-
-        # Yatay kaydırma desteği (Fare Tekerleği)
-        def _on_mousewheel(event):
-            if event.delta:
-                self.photo_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
-            elif event.num == 4:
-                self.photo_canvas.xview_scroll(-1, "units")
-            elif event.num == 5:
-                self.photo_canvas.xview_scroll(1, "units")
-
-        self.photo_canvas.bind("<MouseWheel>", _on_mousewheel)
-        self.photo_canvas.bind("<Button-4>", _on_mousewheel)
-        self.photo_canvas.bind("<Button-5>", _on_mousewheel)
-
-        self.render_polaroid_gallery()
-
-        # 5. Defter Yazı Alanı (Handwritten Notebook Text Area)
+        # 3. Defter Yazı Alanı (Handwritten Scrapbook Text Area)
         txt_outer = ctk.CTkFrame(page, fg_color="transparent")
         txt_outer.pack(fill="both", expand=True, padx=16, pady=(0, 4))
 
-        # Sol Kırmızı/Pastel Defter Kenar Çizgisi (Margin line)
+        # Sol Kırmızı/Pastel Defter Kenar Çizgisi
         left_margin = ctk.CTkFrame(txt_outer, width=2, fg_color=margin_color)
-        left_margin.pack(side="left", fill="y", padx=(0, 6))
+        left_margin.pack(side="left", fill="y", padx=(0, 8))
 
         txt_body = ctk.CTkFrame(txt_outer, fg_color="transparent")
         txt_body.pack(side="left", fill="both", expand=True)
 
         self.textbox = ctk.CTkTextbox(
             txt_body, corner_radius=10,
-            fg_color=paper_bg, border_width=1, border_color=paper_border,
-            text_color=text_color, font=ctk.CTkFont(family="Segoe Print", size=14)
+            fg_color=paper_bg, border_width=0,
+            text_color=text_color, font=ctk.CTkFont(family="Segoe Print", size=13)
         )
         self.textbox.pack(fill="both", expand=True)
         if self.note_text:
@@ -2249,7 +2238,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         if not self.is_today:
             self.textbox.configure(state="disabled")
 
-        # Yazma İstatistiği (Canlı Kelime & Karakter Sayacı)
+        # Yazma İstatistiği
         stats_bar = ctk.CTkFrame(txt_body, fg_color="transparent")
         stats_bar.pack(fill="x", pady=(2, 0))
 
@@ -2262,7 +2251,7 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.textbox.bind("<KeyRelease>", lambda e: self.update_stats())
 
-        # 6. Alt Butonlar (Deftere Kaydet / Notu Sil)
+        # 4. Alt Butonlar
         if self.is_today:
             btn_bar = ctk.CTkFrame(page, fg_color="transparent")
             btn_bar.pack(fill="x", padx=16, pady=(6, 12))
@@ -2283,7 +2272,6 @@ class DailyNoteModal(ctk.CTkToplevel):
                 ).pack(side="right")
 
     def update_stats(self):
-        """Kelime ve karakter sayacını canlı günceller."""
         try:
             txt = self.textbox.get("1.0", "end-1c").strip()
             words = len(txt.split()) if txt else 0
@@ -2295,13 +2283,13 @@ class DailyNoteModal(ctk.CTkToplevel):
     def draw_spiral_rings(self):
         """Sol kenardaki gerçekçi spiral tel halkalarını taşma yapmadan çizer."""
         self.spiral_canvas.delete("all")
-        num_rings = 13
+        num_rings = 14
         ring_color = "#A3978C" if not self.is_dark else "#6E6258"
         ring_highlight = "#FAF4EB" if not self.is_dark else "#8C7E72"
         hole_color = "#42362C" if not self.is_dark else "#120E0C"
 
         for i in range(1, num_rings + 1):
-            cy = 20 + i * (620 / (num_rings + 1))
+            cy = 18 + i * (640 / (num_rings + 1))
             # Delik (Punch Hole)
             self.spiral_canvas.create_oval(14, cy - 4, 24, cy + 4, fill=hole_color, outline="")
             # Spiral Tel Halkası (Metal Ring Loop)
@@ -2310,102 +2298,135 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.spiral_canvas.create_arc(3, cy - 7, 27, cy + 7, start=120, extent=120, style="arc",
                                           outline=ring_highlight, width=1.0)
 
-    def render_polaroid_gallery(self):
-        """Açılı polaroid fotoğrafları canvas üzerine anında çizer ve butonları bağlar."""
-        self.photo_canvas.delete("all")
-        self._polaroid_refs = []
-
-        valid_images = [p for p in self.note_images if os.path.exists(p)]
-        self.note_images = valid_images
+    def render_polaroids(self):
+        """Serbest sürüklenebilir Polaroid fotoğrafları defter sayfası üzerine yerleştirir."""
+        for w in self._polaroid_widgets:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+        self._polaroid_widgets.clear()
+        self._photo_cache.clear()
 
         if not self.note_images:
-            sub_col = "#7D6B5D" if not self.is_dark else "#A8988B"
-            box_border = "#E8DCCB" if not self.is_dark else "#362D27"
-            
-            # Sevimli kesikli çizgili bırakma alanı (Drop Zone)
-            self.photo_canvas.create_rectangle(
-                10, 8, 550, 115, dash=(4, 4), outline=box_border, width=1.5,
-                tags="empty_drop"
-            )
-            empty_msg = "📸 Fotoğraf sürükleyip bırakın veya buraya tıklayarak ekleyin" if self.is_today else "Henüz fotoğraf eklenmemiş."
-            self.photo_canvas.create_text(
-                280, 62, text=empty_msg,
-                font=("Segoe UI", 10, "italic"), fill=sub_col, anchor="center",
-                tags="empty_drop"
-            )
-            if self.is_today:
-                self.photo_canvas.tag_bind("empty_drop", "<Button-1>", lambda e: self.add_image())
-                self.photo_canvas.tag_bind("empty_drop", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
-                self.photo_canvas.tag_bind("empty_drop", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
-
-            self.photo_canvas.config(scrollregion=(0, 0, 560, 125))
             return
 
-        x_cursor = 18
-        y_center = 62
+        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
 
-        for idx, img_path in enumerate(self.note_images):
-            try:
-                angle = self._ANGLES[idx % len(self._ANGLES)]
-                polaroid_img = create_tilted_polaroid(img_path, width=108, height=84, angle=angle)
-                if not polaroid_img:
-                    continue
+        # Sayfa içi varsayılan dağılım koordinatları
+        default_coords = [
+            (370, 70),   # 1. Fotoğraf: Sağ üst
+            (30, 270),   # 2. Fotoğraf: Sol orta
+            (350, 410),  # 3. Fotoğraf: Sağ alt
+            (80, 110),   # 4. Fotoğraf: Sol üst
+            (200, 310),  # 5. Fotoğraf: Orta
+        ]
 
-                tk_img = ImageTk.PhotoImage(polaroid_img)
-                self._polaroid_refs.append(tk_img)
+        page_w = self.page.winfo_width()
+        page_h = self.page.winfo_height()
+        if page_w <= 10:
+            page_w = 580
+        if page_h <= 10:
+            page_h = 680
 
-                pw = polaroid_img.width
-                ph = polaroid_img.height
-                cx = x_cursor + pw // 2
-                cy = y_center
+        for idx, item in enumerate(self.note_images):
+            img_path = item["path"]
+            if not os.path.exists(img_path):
+                continue
 
-                img_tag = f"photo_{idx}"
-                del_tag = f"del_{idx}"
+            angle = item.get("angle", self._ANGLES[idx % len(self._ANGLES)])
+            polaroid_pil = create_tilted_polaroid(img_path, width=120, height=92, angle=angle)
+            if not polaroid_pil:
+                continue
 
-                # 1. Polaroid Fotoğraf Resmi
-                self.photo_canvas.create_image(
-                    cx, cy, image=tk_img,
-                    tags=("photo_item", img_tag)
-                )
+            tk_img = ImageTk.PhotoImage(polaroid_pil)
+            self._photo_cache.append(tk_img)
 
-                # 2. Silme Çarpı Butonu (Kırmızı Daire + Beyaz Çarpı)
-                if self.is_today:
-                    bx = cx + pw // 2 - 12
-                    by = cy - ph // 2 + 10
-                    r = 10
-                    self.photo_canvas.create_oval(
-                        bx - r, by - r, bx + r, by + r,
-                        fill="#EF4444", outline="#DC2626", width=1,
-                        tags=("del_item", del_tag)
-                    )
-                    self.photo_canvas.create_text(
-                        bx, by, text="✕",
-                        font=("Segoe UI", 8, "bold"), fill="#FFFFFF",
-                        tags=("del_item", del_tag)
-                    )
+            pw = polaroid_pil.width
+            ph = polaroid_pil.height
 
-                    # Silme Tıklaması
-                    self.photo_canvas.tag_bind(del_tag, "<Button-1>", lambda e, p=img_path: (play_button_sound(), self.remove_image(p)))
+            # Koordinat belirle
+            cur_x = item.get("x")
+            cur_y = item.get("y")
+            if cur_x is None or cur_y is None:
+                def_x, def_y = default_coords[idx % len(default_coords)]
+                cur_x = min(def_x, max(10, page_w - pw - 15))
+                cur_y = min(def_y, max(50, page_h - ph - 60))
+                item["x"] = cur_x
+                item["y"] = cur_y
 
-                # Fotoğrafa Büyütme Tıklaması
-                self.photo_canvas.tag_bind(img_tag, "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
+            # Taşıyıcı Frame & Canvas
+            p_frame = tk.Frame(self.page, bg=paper_bg, bd=0, highlightthickness=0)
+            p_canvas = tk.Canvas(p_frame, width=pw, height=ph, bg=paper_bg, highlightthickness=0)
+            p_canvas.pack()
 
-                x_cursor += pw + 16
-            except Exception as e:
-                print(f"Polaroid çizim hatası: {e}")
+            # Resmi çiz
+            p_canvas.create_image(pw // 2, ph // 2, image=tk_img, tags="photo")
 
-        # Hover İmleçleri (El İşareti)
-        self.photo_canvas.tag_bind("photo_item", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
-        self.photo_canvas.tag_bind("photo_item", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
-        self.photo_canvas.tag_bind("del_item", "<Enter>", lambda e: self.photo_canvas.config(cursor="hand2"))
-        self.photo_canvas.tag_bind("del_item", "<Leave>", lambda e: self.photo_canvas.config(cursor=""))
+            # Kırmızı silme butonu
+            if self.is_today:
+                bx = pw - 14
+                by = 14
+                r = 10
+                p_canvas.create_oval(bx - r, by - r, bx + r, by + r, fill="#EF4444", outline="#DC2626", width=1, tags="del")
+                p_canvas.create_text(bx, by, text="✕", font=("Segoe UI", 8, "bold"), fill="#FFFFFF", tags="del")
 
-        self.photo_canvas.config(scrollregion=(0, 0, max(560, x_cursor + 20), 125))
+                p_canvas.tag_bind("del", "<Button-1>", lambda e, p=img_path: (play_button_sound(), self.remove_image(p)))
+                p_canvas.tag_bind("del", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
+                p_canvas.tag_bind("del", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+
+            # Sürükle-Bırak Olayları
+            if self.is_today:
+                def _make_drag_handlers(widget, data):
+                    def _start(event):
+                        widget._drag_start_x = event.x
+                        widget._drag_start_y = event.y
+                        widget._has_moved = False
+                        widget.lift()
+                        widget.config(cursor="fleur")
+
+                    def _drag(event):
+                        dx = event.x - widget._drag_start_x
+                        dy = event.y - widget._drag_start_y
+                        if abs(dx) > 2 or abs(dy) > 2:
+                            widget._has_moved = True
+                        nx = widget.winfo_x() + dx
+                        ny = widget.winfo_y() + dy
+                        max_x = max(10, self.page.winfo_width() - widget.winfo_width() - 8)
+                        max_y = max(50, self.page.winfo_height() - widget.winfo_height() - 55)
+                        nx = max(8, min(nx, max_x))
+                        ny = max(48, min(ny, max_y))
+                        widget.place(x=nx, y=ny)
+                        data["x"] = nx
+                        data["y"] = ny
+
+                    def _end(event):
+                        widget.config(cursor="hand2")
+                        if not getattr(widget, "_has_moved", False):
+                            self.open_full_image(data["path"])
+                        else:
+                            self._save_state_quietly()
+
+                    return _start, _drag, _end
+
+                start_cb, drag_cb, end_cb = _make_drag_handlers(p_frame, item)
+                p_canvas.tag_bind("photo", "<Button-1>", start_cb)
+                p_canvas.tag_bind("photo", "<B1-Motion>", drag_cb)
+                p_canvas.tag_bind("photo", "<ButtonRelease-1>", end_cb)
+                p_canvas.tag_bind("photo", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
+                p_canvas.tag_bind("photo", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+            else:
+                p_canvas.tag_bind("photo", "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
+                p_canvas.tag_bind("photo", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
+                p_canvas.tag_bind("photo", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+
+            p_frame.place(x=cur_x, y=cur_y)
+            self._polaroid_widgets.append(p_frame)
 
     def add_image(self):
         files = filedialog.askopenfilenames(
             parent=self,
-            title="Fotoğraf Seç (Deftere İğnele)",
+            title="Fotoğraf Seç (Deftere Yapıştır)",
             filetypes=[("Resim Dosyaları", "*.png *.jpg *.jpeg *.webp *.bmp *.gif")]
         )
         if not files:
@@ -2413,7 +2434,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._import_image_files(files)
 
     def setup_drag_drop(self):
-        """TkinterDnD ile pencereye ve bileşenlere sürükle-bırak desteğini bağlar."""
+        """TkinterDnD ile pencereye ve defter sayfasına sürükle-bırak desteğini bağlar."""
         if not HAS_TKDND or not self.is_today:
             return
         
@@ -2422,8 +2443,6 @@ class DailyNoteModal(ctk.CTkToplevel):
             widgets_to_bind.append(self.outer_frame)
         if hasattr(self, "page"):
             widgets_to_bind.append(self.page)
-        if hasattr(self, "photo_canvas"):
-            widgets_to_bind.append(self.photo_canvas)
         if hasattr(self, "textbox"):
             widgets_to_bind.append(self.textbox)
             if hasattr(self.textbox, "_textbox"):
@@ -2437,14 +2456,13 @@ class DailyNoteModal(ctk.CTkToplevel):
                 pass
 
     def _on_tkdnd_drop(self, event):
-        """TkinterDnD bırakma olayı — dosyaları ayıklayıp galeriyi günceller."""
+        """TkinterDnD bırakma olayı — dosyaları ayıklayıp bırakılan koordinata ekler."""
         if not self.is_today:
             return
         try:
             raw_data = getattr(event, "data", None)
             if not raw_data:
                 return
-            # Windows dosya yollarını (boşluklu/boşluksuz/parantezli) regex ile güvenle ayıkla
             matches = re.findall(r'\{([^}]+)\}|(\S+)', str(raw_data))
             VALID_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
             paths = []
@@ -2455,22 +2473,43 @@ class DailyNoteModal(ctk.CTkToplevel):
                 if ext in VALID_EXTS and os.path.isfile(p):
                     paths.append(p)
             if paths:
-                self._import_image_files(paths)
+                drop_pos = None
+                try:
+                    drop_x = event.x_root - self.page.winfo_rootx() - 60
+                    drop_y = event.y_root - self.page.winfo_rooty() - 50
+                    drop_pos = (drop_x, drop_y)
+                except Exception:
+                    drop_pos = None
+                self._import_image_files(paths, drop_pos=drop_pos)
         except Exception as e:
             print(f"Sürükle-bırak hatası: {e}")
 
-    def _import_image_files(self, files):
-        """Dosya listesini notes_media'ya kopyalar, galeriyi anında günceller."""
+    def _import_image_files(self, files, drop_pos=None):
+        """Dosya listesini notes_media'ya kopyalar, polaroidleri sayfaya ekler."""
         import shutil
         os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
         added = False
-        for f in files:
+
+        for idx, f in enumerate(files):
             try:
                 ext = os.path.splitext(f)[1]
                 unique_name = f"{self.ds}_{int(time.time()*1000)}_{random.randint(100,999)}{ext}"
                 dest_path = os.path.join(NOTES_MEDIA_DIR, unique_name)
                 shutil.copy2(f, dest_path)
-                self.note_images.append(dest_path)
+                
+                # Koordinat: Eğer sürükle-bırak pozisyonu varsa oraya, yoksa None
+                x_pos, y_pos = None, None
+                if drop_pos:
+                    x_pos = max(10, min(drop_pos[0] + idx * 25, 450))
+                    y_pos = max(50, min(drop_pos[1] + idx * 25, 520))
+
+                angle = self._ANGLES[len(self.note_images) % len(self._ANGLES)]
+                self.note_images.append({
+                    "path": dest_path,
+                    "x": x_pos,
+                    "y": y_pos,
+                    "angle": angle
+                })
                 added = True
             except Exception as e:
                 print(f"Fotoğraf kopyalanamadı: {e}")
@@ -2478,22 +2517,20 @@ class DailyNoteModal(ctk.CTkToplevel):
         if not added:
             return
 
-        # Anında otomatik kaydet ve canlı güncelle
-        curr_text = self.textbox.get("1.0", "end-1c").strip()
-        self.parent.daily_notes[self.ds] = {
-            "text": curr_text,
-            "images": list(self.note_images)
-        }
-        self.parent.save_data()
-        self.parent.render_table()
-
-        self.render_polaroid_gallery()
+        self._save_state_quietly()
+        self.render_polaroids()
         self.lift()
         self.focus_force()
 
     def remove_image(self, img_path):
-        if img_path in self.note_images:
-            self.note_images.remove(img_path)
+        target_item = None
+        for item in self.note_images:
+            if item.get("path") == img_path:
+                target_item = item
+                break
+
+        if target_item:
+            self.note_images.remove(target_item)
 
             # Fiziksel dosyayı diskten temizle
             try:
@@ -2502,7 +2539,21 @@ class DailyNoteModal(ctk.CTkToplevel):
             except Exception:
                 pass
 
-            # Anında otomatik kaydet ve canlı güncelle
+            self._save_state_quietly()
+            self.render_polaroids()
+            self.lift()
+            self.focus_force()
+
+    def open_full_image(self, img_path):
+        if os.path.exists(img_path):
+            try:
+                os.startfile(img_path)
+            except Exception:
+                webbrowser.open(img_path)
+
+    def _save_state_quietly(self):
+        """Kullanıcıyı rahatsız etmeden arka planda günlüğü kaydeder ve ana tabloyu günceller."""
+        try:
             curr_text = self.textbox.get("1.0", "end-1c").strip()
             if curr_text or self.note_images:
                 self.parent.daily_notes[self.ds] = {
@@ -2513,17 +2564,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                 self.parent.daily_notes.pop(self.ds, None)
             self.parent.save_data()
             self.parent.render_table()
-
-            self.render_polaroid_gallery()
-            self.lift()
-            self.focus_force()
-
-    def open_full_image(self, img_path):
-        if os.path.exists(img_path):
-            try:
-                os.startfile(img_path)
-            except Exception:
-                webbrowser.open(img_path)
+        except Exception as e:
+            print(f"Sessiz kayıt hatası: {e}")
 
     def save_note(self):
         play_button_sound()
@@ -3580,9 +3622,10 @@ class HabitTrackerApp(_AppBase):
         try:
             used_images = set()
             for n_val in getattr(self, "daily_notes", {}).values():
-                if isinstance(n_val, dict):
                     for p in n_val.get("images", []):
-                        used_images.add(os.path.normpath(p))
+                        p_str = p.get("path") if isinstance(p, dict) else p
+                        if p_str:
+                            used_images.add(os.path.normpath(str(p_str)))
             if os.path.exists(NOTES_MEDIA_DIR):
                 for f_name in os.listdir(NOTES_MEDIA_DIR):
                     f_path = os.path.normpath(os.path.join(NOTES_MEDIA_DIR, f_name))
