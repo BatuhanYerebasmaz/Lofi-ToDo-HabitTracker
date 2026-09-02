@@ -2033,8 +2033,8 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
     draw.rectangle([border_lr - 1, border_top - 1, border_lr + width, border_top + height],
                    outline=(210, 210, 210, 255), width=1)
 
-    # Washi Tape Efekti: Belli bir boyutu geçince (width > 150) 4 köşeye açılı bantlar ekle!
-    if width > 150:
+    # Washi Tape Efekti: Belli bir büyük boyuta ulaşınca (width >= 210) 4 köşeye açılı bantlar ekle!
+    if width >= 210:
         tape_len = max(26, int(width * 0.20))
         tape_th = max(7, int(width * 0.055))
         offset = max(8, int(width * 0.065))
@@ -2617,20 +2617,19 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._update_scroll_region()
 
     def _show_sticker_controls(self, s, sw, sh):
-        """Çıkartma üzerine gelindiğinde mini kontrolleri tam çıkartmanın 4 köşesine yapışık olarak çizer."""
+        """Çıkartma üzerine gelindiğinde mini kontrolleri sabit 4 köşede (dönmeden) çizer."""
         self.canvas.delete("stk_ctrl")
         cx = s.get("x", 200)
         cy = s.get("y", 200)
         stk_sz = s.get("size", 75)
-        hw = stk_sz // 2 + 2
-        hh = stk_sz // 2 + 2
-        ang = s.get("angle", 0)
+        hw = max(28, stk_sz // 2 + 10)
+        hh = max(28, stk_sz // 2 + 10)
 
         r = 10
-        tr_x, tr_y = get_rotated_corner(cx, cy, hw, -hh, ang)
-        tl_x, tl_y = get_rotated_corner(cx, cy, -hw, -hh, ang)
-        br_x, br_y = get_rotated_corner(cx, cy, hw, hh, ang)
-        bl_x, bl_y = get_rotated_corner(cx, cy, -hw, hh, ang)
+        tr_x, tr_y = cx + hw, cy - hh  # Sağ Üst: ✕
+        tl_x, tl_y = cx - hw, cy - hh  # Sol Üst: 🔄
+        br_x, br_y = cx + hw, cy + hh  # Sağ Alt: ➕
+        bl_x, bl_y = cx - hw, cy + hh  # Sol Alt: ➖
 
         # 1. Sağ Üst: Kırmızı Sil (✕)
         self.canvas.create_oval(tr_x - r, tr_y - r, tr_x + r, tr_y + r,
@@ -2704,27 +2703,6 @@ class DailyNoteModal(ctk.CTkToplevel):
                 self._sticker_cache.append(tk_img)
                 self.canvas.itemconfigure(tag_name, image=tk_img)
 
-            cur_ang = s["angle"]
-            sz = s.get("size", 75)
-            h_w = sz // 2 + 2
-            h_h = sz // 2 + 2
-            n_tr_x, n_tr_y = get_rotated_corner(cx, cy, h_w, -h_h, cur_ang)
-            n_tl_x, n_tl_y = get_rotated_corner(cx, cy, -h_w, -h_h, cur_ang)
-            n_br_x, n_br_y = get_rotated_corner(cx, cy, h_w, h_h, cur_ang)
-            n_bl_x, n_bl_y = get_rotated_corner(cx, cy, -h_w, h_h, cur_ang)
-
-            self.canvas.coords("stk_del_oval", n_tr_x - r, n_tr_y - r, n_tr_x + r, n_tr_y + r)
-            self.canvas.coords("stk_del_txt", n_tr_x, n_tr_y)
-
-            self.canvas.coords("stk_rot_oval", n_tl_x - r, n_tl_y - r, n_tl_x + r, n_tl_y + r)
-            self.canvas.coords("stk_rot_txt", n_tl_x, n_tl_y)
-
-            self.canvas.coords("stk_plus_oval", n_br_x - r, n_br_y - r, n_br_x + r, n_br_y + r)
-            self.canvas.coords("stk_plus_txt", n_br_x, n_br_y)
-
-            self.canvas.coords("stk_minus_oval", n_bl_x - r, n_bl_y - r, n_bl_x + r, n_bl_y + r)
-            self.canvas.coords("stk_minus_txt", n_bl_x, n_bl_y)
-
         def _end_stk_rot(e):
             self._is_rotating = False
             self.canvas.config(cursor="hand2")
@@ -2743,23 +2721,20 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
     def _show_polaroid_controls(self, item, pw, ph):
-        """Polaroid fotoğraf üzerine gelindiğinde mini kontrolleri tam fotoğrafın 4 köşesine yapışık olarak çizer."""
+        """Polaroid fotoğraf üzerine gelindiğinde mini kontrolleri sabit 4 köşede (dönmeden) çizer."""
         self.canvas.delete("pol_ctrl")
         cx = item.get("x", 200)
         cy = item.get("y", 200)
         w_cur = item.get("width", 140)
         h_cur = int(w_cur * 0.77)
-        card_w = w_cur + 14
-        card_h = h_cur + 27
-        hw = card_w // 2 + 2
-        hh = card_h // 2 + 2
-        ang = item.get("angle", 0)
+        hw = max(55, int(w_cur * 0.54)) + 12
+        hh = max(45, int(h_cur * 0.54)) + 12
 
         r = 11
-        tr_x, tr_y = get_rotated_corner(cx, cy, hw, -hh, ang)
-        tl_x, tl_y = get_rotated_corner(cx, cy, -hw, -hh, ang)
-        br_x, br_y = get_rotated_corner(cx, cy, hw, hh, ang)
-        bl_x, bl_y = get_rotated_corner(cx, cy, -hw, hh, ang)
+        tr_x, tr_y = cx + hw, cy - hh  # Sağ Üst: ✕
+        tl_x, tl_y = cx - hw, cy - hh  # Sol Üst: 🔄
+        br_x, br_y = cx + hw, cy + hh  # Sağ Alt: ➕
+        bl_x, bl_y = cx - hw, cy + hh  # Sol Alt: ➖
 
         # 1. Sağ Üst: Kırmızı Sil (✕)
         self.canvas.create_oval(tr_x - r, tr_y - r, tr_x + r, tr_y + r,
@@ -2825,35 +2800,18 @@ class DailyNoteModal(ctk.CTkToplevel):
                 self._photo_cache.append(tk_img)
                 self.canvas.itemconfigure(tag_name, image=tk_img)
 
-            c_w = w + 14
-            c_h = h + 27
-            h_w = c_w // 2 + 2
-            h_h = c_h // 2 + 2
-            cur_ang = item["angle"]
-
-            n_tr_x, n_tr_y = get_rotated_corner(cx, cy, h_w, -h_h, cur_ang)
-            n_tl_x, n_tl_y = get_rotated_corner(cx, cy, -h_w, -h_h, cur_ang)
-            n_br_x, n_br_y = get_rotated_corner(cx, cy, h_w, h_h, cur_ang)
-            n_bl_x, n_bl_y = get_rotated_corner(cx, cy, -h_w, h_h, cur_ang)
-
-            self.canvas.coords("pol_del_oval", n_tr_x - r, n_tr_y - r, n_tr_x + r, n_tr_y + r)
-            self.canvas.coords("pol_del_txt", n_tr_x, n_tr_y)
-
-            self.canvas.coords("pol_rot_oval", n_tl_x - r, n_tl_y - r, n_tl_x + r, n_tl_y + r)
-            self.canvas.coords("pol_rot_txt", n_tl_x, n_tl_y)
-
-            self.canvas.coords("pol_plus_oval", n_br_x - r, n_br_y - r, n_br_x + r, n_br_y + r)
-            self.canvas.coords("pol_plus_txt", n_br_x, n_br_y)
-
-            self.canvas.coords("pol_minus_oval", n_bl_x - r, n_bl_y - r, n_bl_x + r, n_bl_y + r)
-            self.canvas.coords("pol_minus_txt", n_bl_x, n_bl_y)
-
         def _end_pol_rot(e):
             self._is_rotating = False
             self.canvas.config(cursor="hand2")
             self._save_state_quietly()
             self.render_canvas_polaroids()
 
+        self.canvas.tag_bind("pol_del", "<Button-1>", lambda e: _del_pol())
+        self.canvas.tag_bind("pol_plus", "<Button-1>", lambda e: _res_pol(15))
+        self.canvas.tag_bind("pol_minus", "<Button-1>", lambda e: _res_pol(-15))
+
+        self.canvas.tag_bind("pol_rot", "<Button-1>", _start_pol_rot)
+        self.canvas.tag_bind("pol_rot", "<B1-Motion>", _drag_pol_rot)
         self.canvas.tag_bind("pol_del", "<Button-1>", lambda e: _del_pol())
         self.canvas.tag_bind("pol_plus", "<Button-1>", lambda e: _res_pol(15))
         self.canvas.tag_bind("pol_minus", "<Button-1>", lambda e: _res_pol(-15))
