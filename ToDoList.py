@@ -2335,8 +2335,9 @@ class DailyNoteModal(ctk.CTkToplevel):
         # Sol Kırmızı Margin Çizgisi
         self.canvas.create_line(42, 10, 42, 2400, fill=margin_color, width=2, tags="margin_line")
 
-        # Görünmez Metin Motoru (Klavye, seçim, pano ve geçmişi yönetir - Görseli %100 Şeffaf Tuvalde Çizilir)
-        self.textbox = tk.Text(self, font=self.note_font, wrap="none", undo=True)
+        # Metin Giriş Motoru (Görünmez/offscreen yerleştirilir, klavye ve odağı kesintisiz alır)
+        self.textbox = tk.Text(self.page, font=self.note_font, wrap="none", undo=True, width=1, height=1, bd=0, highlightthickness=0)
+        self.textbox.place(x=-1000, y=-1000)
         if self.note_text:
             self.textbox.insert("1.0", self.note_text)
 
@@ -2364,6 +2365,7 @@ class DailyNoteModal(ctk.CTkToplevel):
                     pass
 
         self.canvas.bind("<Button-1>", _on_canvas_click, add="+")
+        self.canvas.bind("<Key>", lambda e: self.textbox.focus_set())
 
         # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
         def _on_canvas_wheel(event):
@@ -2871,7 +2873,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             num_lines = max(1, len(raw_lines))
             txt_h = max(30, num_lines * 28 + 20)
 
-            max_y = txt_h + 80
+            max_y = max(2400, txt_h + 80)
             for item in self.note_images:
                 y = item.get("y", 0)
                 if y:
