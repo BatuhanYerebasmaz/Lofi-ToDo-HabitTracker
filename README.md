@@ -135,6 +135,38 @@ bash MacOS/build_release.command      # -> dist/Lofi-ToDo-HabitTracker.app + .dm
 
 macOS'ta devre dışı kalan Windows'a özgü özellikler: global `Ctrl+Shift+T` kısayolu, köşe yuvarlatma (DWM API) ve `.ico` başlık simgesi.
 
+### 🐧 Linux Kurulumu
+
+Uygulama Windows için yazıldı, ancak `Linux/` klasöründeki başlatıcı sayesinde **ana kaynak koda tek satır dokunmadan** Linux'ta da çalışır. Dağıtımdan bağımsızdır — Debian/Ubuntu (apt), Fedora (dnf) ve Arch (pacman) üzerinde container testleriyle doğrulanmıştır.
+
+**A) Kaynaktan çalıştırma**
+
+1. **`Linux/baslat.sh`** dosyasını çalıştırın:
+   ```bash
+   cd Linux && ./baslat.sh
+   ```
+   - İlk açılışta kendi sanal ortamını (`Linux/.venv`) kurar ve bağımlılıkları indirir (1-2 dk), sonraki açılışlar anındadır.
+   - Tkinter destekli bir Python 3 gerekir. Yoksa: `sudo apt install python3 python3-venv python3-tk` (Debian/Ubuntu), `sudo dnf install python3 python3-tkinter` (Fedora) veya `sudo pacman -S python tk` (Arch).
+   - Veriler proje içindeki `data/` klasöründe kalır.
+
+**B) Uygulama menüsüne ekleme (isteğe bağlı)**
+
+Masaüstü ortamınızın (GNOME, KDE, XFCE, Hyprland + rofi/wofi, vb.) uygulama başlatıcısında görünmesini isterseniz:
+```bash
+cd Linux && ./install_app_menu.sh
+```
+freedesktop.org `.desktop` standardını kullanır; `~/.local/share/applications/` içine bir giriş, `~/.local/share/icons/` içine bir ikon ekler. Dağıtıma özel hiçbir şey yapmaz. Kaldırmak için: `rm ~/.local/share/applications/lofi-todo-habit-tracker.desktop`.
+
+**Başlatıcı ne yapıyor?** Çalışma anında şu Linux uyarlamalarını yapar (dosyaya yazmaz, yalnızca bellekte):
+   - **Ses:** Windows `winsound`/`winmm` yerine sahte modül + `paplay`/`aplay`/`ffplay` (bulunan ilki).
+   - **Görsel açma:** `os.startfile` yerine `xdg-open`.
+   - **Ayarlar penceresi:** X11/Wayland'de pencere daha görünür olmadan `grab_set()` çağrılması "grab failed" hatasına veya boş/beyaz bir pencereye yol açtığından, pencere gerçekten görünür olana kadar bekleyip ardından grab uygulanır.
+   - **Sistem tepsisi:** `pystray`'in gerçek bir Linux arka ucu (AppIndicator/GTK ya da X11) olduğu için macOS'un aksine devre dışı bırakılmaz.
+
+Linux'ta devre dışı kalan Windows'a özgü özellikler: global `Ctrl+Shift+T` kısayolu ve köşe yuvarlatma (Windows `SetWindowRgn` API); ikisi de orijinal kodda `try/except` ile korunmuş olduğundan sessizce no-op olurlar, uygulama çökmez.
+
+> **Bilinen sınırlama:** Kayan Mini Widget (📌 Mini) bazı tiling pencere yöneticilerinde (ör. Hyprland) `overrideredirect` penceresi olarak açıldığından görünmeyebilir. Ana özellikler bundan etkilenmez.
+
 ---
 
 ## 📂 Proje Yapısı
@@ -151,6 +183,10 @@ ToDo/
 │   ├── make_app_icon.py     # 1024px uygulama ikonu (AppIcon.icns) üreticisi
 │   ├── AppIcon.icns         # Uygulama ikonu
 │   └── mac_launcher.py      # winsound stub + afplay/open/tepsi/veri yamaları
+├── Linux/                   # Linux desteği (ana kodu değiştirmez)
+│   ├── baslat.sh            # Kaynaktan başlat (venv kurar + açar)
+│   ├── install_app_menu.sh  # Uygulama menüsüne .desktop girişi ekler
+│   └── linux_launcher.py    # winsound stub + paplay/xdg-open/grab_set yamaları
 ├── ToDoList.py              # Ana uygulama kaynak kodu
 ├── baslat.bat               # Hızlı başlatma betiği (Windows)
 ├── Kısayol Oluşturucu.vbs   # Evrensel Unicode masaüstü kısayol oluşturucu
