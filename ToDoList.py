@@ -2022,6 +2022,15 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
     return polaroid
 
 
+STICKER_CATEGORIES = {
+    "🌸 Çiçek & Doğa": ["🌸", "🌼", "🌻", "🌷", "🌹", "🍀", "🌿", "🍃", "🌱", "🍄", "🍂", "🍁", "🌾", "🪴"],
+    "☕ Cozy Lofi": ["☕", "🍵", "🧋", "🥐", "🥞", "🍞", "🍪", "🍩", "🍰", "🧁", "🍓", "🍎", "🥑", "🥨", "🍯"],
+    "✨ Sevimli & Tatlı": ["✨", "⭐", "🌟", "💫", "💖", "🎀", "🧸", "🐾", "💌", "🪄", "🐈", "🐶", "🐰", "🐥", "🌙"],
+    "🌦️ Gökyüzü": ["☀️", "🌤️", "☁️", "🌧️", "🌈", "🪐", "⚡", "❄️", "🌊", "🫧", "🕯️", "🏮"],
+    "🎨 Marker & Not": ["📌", "🏷️", "✂️", "🖍️", "💭", "💯", "🎯", "💡", "🎵", "🎧", "📷", "🔖", "📜", "✏️"]
+}
+
+
 class DailyNoteModal(ctk.CTkToplevel):
     """Gerçek Defter Hissiyatlı & Serbestçe Sürüklenebilir & Senkron Kaydırmalı Lofi Scrapbook."""
     CURRENT_INSTANCE = None
@@ -2049,6 +2058,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         if isinstance(raw_data, dict):
             self.note_text = raw_data.get("text", "")
             raw_imgs = raw_data.get("images", [])
+            raw_stickers = raw_data.get("stickers", [])
             if "blocks" in raw_data and isinstance(raw_data["blocks"], list):
                 if not raw_imgs:
                     raw_imgs = [b for b in raw_data["blocks"] if b.get("type") == "image"]
@@ -2057,6 +2067,7 @@ class DailyNoteModal(ctk.CTkToplevel):
         else:
             self.note_text = str(raw_data)
             raw_imgs = []
+            raw_stickers = []
 
         # Fotoğrafları dict formatına normalize et
         self.note_images = []
@@ -2078,6 +2089,17 @@ class DailyNoteModal(ctk.CTkToplevel):
                         item["width"] = 135
                     self.note_images.append(item)
 
+        # Çıkartmaları normalize et
+        self.note_stickers = []
+        for s in raw_stickers:
+            if isinstance(s, dict) and "emoji" in s:
+                self.note_stickers.append({
+                    "emoji": s["emoji"],
+                    "x": s.get("x", 200),
+                    "y": s.get("y", 200),
+                    "size": s.get("size", 32)
+                })
+
         self.title("📖 Günün Defter Sayfası" if self.is_today else "📖 Defter Arşivi")
 
         px, py = 100, 100
@@ -2097,6 +2119,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._drag_start_y = 0
         self._photo_cache = []
         self._polaroid_win_ids = []
+        self._sticker_win_ids = []
+        self._sticker_popup = None
 
         self.setup_ui()
         self.after(5, self.apply_round_corners)
@@ -2108,7 +2132,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             self.bind("<Control-s>", lambda e: self.save_note())
             self.setup_drag_drop()
 
-        # Canvas oturduğunda polaroidleri çiz
+        # Canvas oturduğunda polaroid ve stickerları çiz
         self.after(60, self.render_canvas_polaroids)
 
     def apply_round_corners(self):
@@ -2252,7 +2276,7 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.txt_win_id = self.canvas.create_window(48, 16, anchor="nw", window=txt_container, width=515, height=520)
 
-        # Fare Tekerleği ile Senkronize Kaydırma (Tüm Defteri ve Fotoğrafları Birlikte Kaydırır)
+        # Fare Tekerleği ile Senkronize Kaydırma
         def _on_canvas_wheel(event):
             if event.delta:
                 self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -2272,9 +2296,18 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.textbox.bind("<KeyRelease>", _on_key)
 
-        # 4. Alt Bilgi Çubuğu (Kelime/Karakter Sayacı)
+        # 4. Alt Bilgi Çubuğu (Sol: Sticker Butonu · Sağ: Kelime Sayacı)
         stats_bar = ctk.CTkFrame(page, fg_color="transparent")
         stats_bar.pack(fill="x", padx=16, pady=(0, 2))
+
+        if self.is_today:
+            self.sticker_btn = ctk.CTkButton(
+                stats_bar, text="🌸 + Çıkartmalar", width=125, height=26, corner_radius=13,
+                fg_color=paper_border, hover_color=theme.get("btn_primary", "#B0D2AF"),
+                text_color=text_color, font=ctk.CTkFont(size=11, weight="bold"),
+                command=self.toggle_sticker_popup
+            )
+            self.sticker_btn.pack(side="left")
 
         self.stat_label = ctk.CTkLabel(
             stats_bar, text="✍️ 0 kelime · 0 karakter",
@@ -2293,9 +2326,9 @@ class DailyNoteModal(ctk.CTkToplevel):
                 fg_color=theme["btn_primary"], hover_color=theme["btn_primary_hover"],
                 text_color=theme["text"], font=ctk.CTkFont(size=12, weight="bold"),
                 command=self.save_note
-            ).pack(side="left", fill="x", expand=True, padx=(0, 8 if (self.note_text or self.note_images) else 0))
+            ).pack(side="left", fill="x", expand=True, padx=(0, 8 if (self.note_text or self.note_images or self.note_stickers) else 0))
 
-            if self.note_text or self.note_images:
+            if self.note_text or self.note_images or self.note_stickers:
                 ctk.CTkButton(
                     btn_bar, text="🗑️ Notu Sil", height=34, corner_radius=10,
                     fg_color=theme.get("btn_danger", "#EF4444"), hover_color=theme.get("btn_danger_hover", "#DC2626"),
@@ -2303,8 +2336,186 @@ class DailyNoteModal(ctk.CTkToplevel):
                     command=self.delete_note
                 ).pack(side="right")
 
+    def toggle_sticker_popup(self):
+        """Sol altta sevimli çıkartma seçici penceresini açar/kapatır."""
+        play_button_sound()
+        if self._sticker_popup and self._sticker_popup.winfo_ismapped():
+            self._sticker_popup.place_forget()
+            return
+
+        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
+        paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
+        text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
+
+        if not self._sticker_popup:
+            self._sticker_popup = ctk.CTkFrame(
+                self.page, width=360, height=240, corner_radius=16,
+                border_width=2, border_color=paper_border, fg_color=paper_bg
+            )
+
+            p_head = ctk.CTkFrame(self._sticker_popup, fg_color="transparent")
+            p_head.pack(fill="x", padx=12, pady=(8, 4))
+
+            ctk.CTkLabel(
+                p_head, text="🎨  Çıkartma & Marker Paleti",
+                font=ctk.CTkFont(family="Georgia", size=12, weight="bold"),
+                text_color=text_color
+            ).pack(side="left")
+
+            ctk.CTkButton(
+                p_head, text="✕", width=22, height=22, corner_radius=11,
+                fg_color="transparent", hover_color=paper_border,
+                text_color=text_color, font=ctk.CTkFont(size=10, weight="bold"),
+                command=lambda: self._sticker_popup.place_forget()
+            ).pack(side="right")
+
+            scroll_stk = ctk.CTkScrollableFrame(self._sticker_popup, fg_color="transparent")
+            scroll_stk.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+            for cat_name, items in STICKER_CATEGORIES.items():
+                ctk.CTkLabel(
+                    scroll_stk, text=cat_name, font=ctk.CTkFont(size=10, weight="bold"),
+                    text_color=text_color
+                ).pack(anchor="w", padx=4, pady=(6, 2))
+
+                grid_row = ctk.CTkFrame(scroll_stk, fg_color="transparent")
+                grid_row.pack(fill="x", padx=2, pady=2)
+
+                for emoji in items:
+                    btn = ctk.CTkButton(
+                        grid_row, text=emoji, width=32, height=32, corner_radius=8,
+                        fg_color="transparent", hover_color=paper_border,
+                        font=ctk.CTkFont(size=15),
+                        command=lambda e=emoji: self.add_sticker(e)
+                    )
+                    btn.pack(side="left", padx=2, pady=2)
+
+        self._sticker_popup.place(x=16, y=self.page.winfo_height() - 310)
+        self._sticker_popup.lift()
+
+    def add_sticker(self, emoji):
+        """Sayfaya yeni bir çıkartma ekler."""
+        play_button_sound()
+        try:
+            cur_y = int(self.canvas.yview()[0] * 2000) + 140
+        except Exception:
+            cur_y = 140
+
+        self.note_stickers.append({
+            "emoji": emoji,
+            "x": 260,
+            "y": max(40, cur_y),
+            "size": 32
+        })
+        self._save_state_quietly()
+        self.render_canvas_stickers()
+        if self._sticker_popup:
+            self._sticker_popup.lift()
+
+    def render_canvas_stickers(self):
+        """Serbest sürüklenebilir çıkartmaları Canvas üzerine çizer."""
+        for win_id in self._sticker_win_ids:
+            try:
+                self.canvas.delete(win_id)
+            except Exception:
+                pass
+        self._sticker_win_ids.clear()
+
+        if not self.note_stickers:
+            self._update_scroll_region()
+            return
+
+        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
+
+        for idx, s in enumerate(self.note_stickers):
+            s_frame = tk.Frame(self.canvas, bg=paper_bg, bd=0, highlightthickness=0)
+            s_lbl = tk.Label(
+                s_frame, text=s["emoji"], font=("Segoe UI Emoji", s.get("size", 32)),
+                bg=paper_bg, bd=0, highlightthickness=0
+            )
+            s_lbl.pack(padx=8, pady=8)
+
+            if self.is_today:
+                del_btn = tk.Label(s_frame, text="✕", font=("Segoe UI", 7, "bold"), fg="#EF4444", bg=paper_bg, cursor="hand2")
+                plus_btn = tk.Label(s_frame, text="➕", font=("Segoe UI", 6), fg="#10B981", bg=paper_bg, cursor="hand2")
+                min_btn = tk.Label(s_frame, text="➖", font=("Segoe UI", 6), fg="#6B7280", bg=paper_bg, cursor="hand2")
+
+                def _del_stk(cur_s=s):
+                    play_button_sound()
+                    if cur_s in self.note_stickers:
+                        self.note_stickers.remove(cur_s)
+                    self._save_state_quietly()
+                    self.render_canvas_stickers()
+
+                def _res_stk(delta, cur_s=s):
+                    play_button_sound()
+                    cur_s["size"] = max(18, min(64, cur_s.get("size", 32) + delta))
+                    self._save_state_quietly()
+                    self.render_canvas_stickers()
+
+                del_btn.bind("<Button-1>", lambda e, cur=s: _del_stk(cur))
+                plus_btn.bind("<Button-1>", lambda e, cur=s: _res_stk(4, cur))
+                min_btn.bind("<Button-1>", lambda e, cur=s: _res_stk(-4, cur))
+
+                def _show_ctrls(e, d=del_btn, p=plus_btn, m=min_btn, sf=s_frame):
+                    d.place(relx=1.0, rely=0.0, anchor="ne")
+                    p.place(relx=1.0, rely=1.0, anchor="se")
+                    m.place(relx=0.0, rely=1.0, anchor="sw")
+                    sf.config(cursor="fleur")
+
+                def _hide_ctrls(e, d=del_btn, p=plus_btn, m=min_btn, sf=s_frame):
+                    try:
+                        d.place_forget()
+                        p.place_forget()
+                        m.place_forget()
+                        sf.config(cursor="")
+                    except Exception:
+                        pass
+
+                s_frame.bind("<Enter>", _show_ctrls)
+                s_frame.bind("<Leave>", _hide_ctrls)
+                s_lbl.bind("<Enter>", _show_ctrls)
+                s_lbl.bind("<Leave>", _hide_ctrls)
+
+            cur_x = s.get("x", 200)
+            cur_y = s.get("y", 200)
+            win_id = self.canvas.create_window(cur_x, cur_y, anchor="center", window=s_frame)
+            self._sticker_win_ids.append(win_id)
+
+            if self.is_today:
+                def _make_stk_drag(w_id, lbl, target_s):
+                    def _start(e):
+                        lbl._drag_start_x = e.x
+                        lbl._drag_start_y = e.y
+                        self.canvas.tag_raise(w_id)
+                        lbl.config(cursor="fleur")
+
+                    def _drag(e):
+                        dx = e.x - getattr(lbl, "_drag_start_x", 0)
+                        dy = e.y - getattr(lbl, "_drag_start_y", 0)
+                        coords = self.canvas.coords(w_id)
+                        nx = max(10, min(560, coords[0] + dx))
+                        ny = max(10, coords[1] + dy)
+                        self.canvas.coords(w_id, nx, ny)
+                        target_s["x"] = nx
+                        target_s["y"] = ny
+                        self._update_scroll_region()
+
+                    def _end(e):
+                        lbl.config(cursor="hand2")
+                        self._save_state_quietly()
+
+                    return _start, _drag, _end
+
+                st_cb, dr_cb, end_cb = _make_stk_drag(win_id, s_lbl, s)
+                s_lbl.bind("<Button-1>", st_cb)
+                s_lbl.bind("<B1-Motion>", dr_cb)
+                s_lbl.bind("<ButtonRelease-1>", end_cb)
+
+        self._update_scroll_region()
+
     def _update_scroll_region(self):
-        """Metin ve fotoğrafların konumuna göre sayfa kaydırma sınırını dinamik ayarlar."""
+        """Metin, fotoğraflar ve çıkartmaların konumuna göre sayfa kaydırma sınırını dinamik ayarlar."""
         try:
             txt = self.textbox.get("1.0", "end-1c")
             num_lines = max(18, len(txt.split("\n")))
@@ -2317,6 +2528,11 @@ class DailyNoteModal(ctk.CTkToplevel):
                 y = item.get("y", 0)
                 if y:
                     max_y = max(max_y, y + 200)
+
+            for s in self.note_stickers:
+                y = s.get("y", 0)
+                if y:
+                    max_y = max(max_y, y + 100)
 
             self.canvas.config(scrollregion=(0, 0, 580, max_y))
         except Exception:
@@ -2347,10 +2563,6 @@ class DailyNoteModal(ctk.CTkToplevel):
                 pass
         self._polaroid_win_ids.clear()
         self._photo_cache.clear()
-
-        if not self.note_images:
-            self._update_scroll_region()
-            return
 
         paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
 
@@ -2510,7 +2722,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                 p_canvas.tag_bind("photo", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
                 p_canvas.tag_bind("photo", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
 
-        self._update_scroll_region()
+        # Çıkartmaları da çiz
+        self.render_canvas_stickers()
 
     def update_stats(self):
         """Kelime ve karakter sayacını canlı günceller."""
@@ -2654,10 +2867,11 @@ class DailyNoteModal(ctk.CTkToplevel):
         """Kullanıcıyı rahatsız etmeden arka planda günlüğü kaydeder."""
         try:
             curr_text = self.textbox.get("1.0", "end-1c")
-            if curr_text.strip() or self.note_images:
+            if curr_text.strip() or self.note_images or self.note_stickers:
                 self.parent.daily_notes[self.ds] = {
                     "text": curr_text,
-                    "images": list(self.note_images)
+                    "images": list(self.note_images),
+                    "stickers": list(self.note_stickers)
                 }
             else:
                 self.parent.daily_notes.pop(self.ds, None)
@@ -2669,10 +2883,11 @@ class DailyNoteModal(ctk.CTkToplevel):
     def save_note(self):
         play_button_sound()
         curr_text = self.textbox.get("1.0", "end-1c")
-        if curr_text.strip() or self.note_images:
+        if curr_text.strip() or self.note_images or self.note_stickers:
             self.parent.daily_notes[self.ds] = {
                 "text": curr_text,
-                "images": list(self.note_images)
+                "images": list(self.note_images),
+                "stickers": list(self.note_stickers)
             }
         else:
             self.parent.daily_notes.pop(self.ds, None)
@@ -2694,6 +2909,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             except Exception:
                 pass
 
+        self.note_stickers.clear()
         self.parent.daily_notes.pop(self.ds, None)
         self.parent.save_data()
         self.parent.render_table()
