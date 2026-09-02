@@ -2335,7 +2335,10 @@ class DailyNoteModal(ctk.CTkToplevel):
                 continue
 
             angle = item.get("angle", self._ANGLES[idx % len(self._ANGLES)])
-            polaroid_pil = create_tilted_polaroid(img_path, width=120, height=92, angle=angle)
+            img_w = item.get("width", 120)
+            img_h = int(img_w * 0.77)
+
+            polaroid_pil = create_tilted_polaroid(img_path, width=img_w, height=img_h, angle=angle)
             if not polaroid_pil:
                 continue
 
@@ -2360,30 +2363,97 @@ class DailyNoteModal(ctk.CTkToplevel):
             p_canvas = tk.Canvas(p_frame, width=pw, height=ph, bg=paper_bg, highlightthickness=0)
             p_canvas.pack()
 
-            # Resmi çiz
+            # 1. Polaroid Resmi
             p_canvas.create_image(pw // 2, ph // 2, image=tk_img, tags="photo")
 
-            # Kırmızı silme butonu
+            # 2. Hover Kontrolleri (Döndürme, Boyutlandırma ve Silme)
             if self.is_today:
-                bx = pw - 14
-                by = 14
                 r = 10
-                p_canvas.create_oval(bx - r, by - r, bx + r, by + r, fill="#EF4444", outline="#DC2626", width=1, tags="del")
-                p_canvas.create_text(bx, by, text="✕", font=("Segoe UI", 8, "bold"), fill="#FFFFFF", tags="del")
 
-                p_canvas.tag_bind("del", "<Button-1>", lambda e, p=img_path: (play_button_sound(), self.remove_image(p)))
-                p_canvas.tag_bind("del", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
-                p_canvas.tag_bind("del", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+                # Sağ Üst: Kırmızı Silme Butonu (✕)
+                del_bx, del_by = pw - 14, 14
+                p_canvas.create_oval(del_bx - r, del_by - r, del_bx + r, del_by + r,
+                                     fill="#EF4444", outline="#DC2626", width=1, tags=("ctrl_group", "del_btn"))
+                p_canvas.create_text(del_bx, del_by, text="✕", font=("Segoe UI", 8, "bold"),
+                                     fill="#FFFFFF", tags=("ctrl_group", "del_btn"))
+
+                # Sol Üst: Döndürme Butonu (🔄)
+                rot_bx, rot_by = 14, 14
+                p_canvas.create_oval(rot_bx - r, rot_by - r, rot_bx + r, rot_by + r,
+                                     fill="#3B82F6", outline="#2563EB", width=1, tags=("ctrl_group", "rot_btn"))
+                p_canvas.create_text(rot_bx, rot_by, text="🔄", font=("Segoe UI", 7, "bold"),
+                                     fill="#FFFFFF", tags=("ctrl_group", "rot_btn"))
+
+                # Sağ Alt: Büyütme Butonu (➕)
+                plus_bx, plus_by = pw - 14, ph - 14
+                p_canvas.create_oval(plus_bx - r, plus_by - r, plus_bx + r, plus_by + r,
+                                      fill="#10B981", outline="#059669", width=1, tags=("ctrl_group", "plus_btn"))
+                p_canvas.create_text(plus_bx, plus_by, text="➕", font=("Segoe UI", 8, "bold"),
+                                      fill="#FFFFFF", tags=("ctrl_group", "plus_btn"))
+
+                # Sol Alt: Küçültme Butonu (➖)
+                min_bx, min_by = 14, ph - 14
+                p_canvas.create_oval(min_bx - r, min_by - r, min_bx + r, min_by + r,
+                                     fill="#6B7280", outline="#4B5563", width=1, tags=("ctrl_group", "minus_btn"))
+                p_canvas.create_text(min_bx, min_by, text="➖", font=("Segoe UI", 8, "bold"),
+                                     fill="#FFFFFF", tags=("ctrl_group", "minus_btn"))
+
+                # Başlangıçta kontrolleri gizle (Sadece mouse gelince görünür)
+                p_canvas.itemconfigure("ctrl_group", state="hidden")
+
+                # Döndürme & Boyutlandırma Aksiyonları
+                def _rotate_item(target_item=item):
+                    play_button_sound()
+                    c_angle = target_item.get("angle", 0)
+                    new_angle = c_angle + 4
+                    if new_angle > 12:
+                        new_angle = -12
+                    target_item["angle"] = new_angle
+                    self._save_state_quietly()
+                    self.render_polaroids()
+
+                def _resize_item(delta, target_item=item):
+                    play_button_sound()
+                    c_w = target_item.get("width", 120)
+                    new_w = max(80, min(220, c_w + delta))
+                    target_item["width"] = new_w
+                    self._save_state_quietly()
+                    self.render_polaroids()
+
+                # Tıklama Olayları
+                p_canvas.tag_bind("del_btn", "<Button-1>", lambda e, p=img_path: (play_button_sound(), self.remove_image(p)))
+                p_canvas.tag_bind("rot_btn", "<Button-1>", lambda e: _rotate_item())
+                p_canvas.tag_bind("plus_btn", "<Button-1>", lambda e: _resize_item(15))
+                p_canvas.tag_bind("minus_btn", "<Button-1>", lambda e: _resize_item(-15))
+
+                for tag in ("del_btn", "rot_btn", "plus_btn", "minus_btn"):
+                    p_canvas.tag_bind(tag, "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
+                    p_canvas.tag_bind(tag, "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+
+                # Fare Tekerleği Desteği (Ctrl+Tekerlek: Boyut, Normal Tekerlek: Açı)
+                def _on_polaroid_wheel(event, target_item=item):
+                    if getattr(event, "state", 0) & 0x0004:
+                        d = 12 if (getattr(event, "delta", 0) > 0 or getattr(event, "num", 0) == 4) else -12
+                        _resize_item(d, target_item)
+                    else:
+                        d = 3 if (getattr(event, "delta", 0) > 0 or getattr(event, "num", 0) == 4) else -3
+                        target_item["angle"] = max(-20, min(20, target_item.get("angle", 0) + d))
+                        self._save_state_quietly()
+                        self.render_polaroids()
+
+                p_canvas.bind("<MouseWheel>", _on_polaroid_wheel)
+                p_canvas.bind("<Button-4>", _on_polaroid_wheel)
+                p_canvas.bind("<Button-5>", _on_polaroid_wheel)
 
             # Sürükle-Bırak Olayları
             if self.is_today:
-                def _make_drag_handlers(widget, data):
+                def _make_drag_handlers(widget, canvas_widget, data):
                     def _start(event):
                         widget._drag_start_x = event.x
                         widget._drag_start_y = event.y
                         widget._has_moved = False
                         widget.lift()
-                        widget.config(cursor="fleur")
+                        canvas_widget.config(cursor="fleur")
 
                     def _drag(event):
                         dx = event.x - widget._drag_start_x
@@ -2401,20 +2471,33 @@ class DailyNoteModal(ctk.CTkToplevel):
                         data["y"] = ny
 
                     def _end(event):
-                        widget.config(cursor="hand2")
+                        canvas_widget.config(cursor="hand2")
                         if not getattr(widget, "_has_moved", False):
                             self.open_full_image(data["path"])
                         else:
                             self._save_state_quietly()
 
-                    return _start, _drag, _end
+                    def _enter(event):
+                        canvas_widget.itemconfigure("ctrl_group", state="normal")
+                        canvas_widget.config(cursor="hand2")
 
-                start_cb, drag_cb, end_cb = _make_drag_handlers(p_frame, item)
+                    def _leave(event):
+                        # Fare gerçekten canvas sınırlarının dışına çıktıysa butonları gizle
+                        try:
+                            if event.x < 0 or event.x >= canvas_widget.winfo_width() or event.y < 0 or event.y >= canvas_widget.winfo_height():
+                                canvas_widget.itemconfigure("ctrl_group", state="hidden")
+                                canvas_widget.config(cursor="")
+                        except Exception:
+                            pass
+
+                    return _start, _drag, _end, _enter, _leave
+
+                start_cb, drag_cb, end_cb, enter_cb, leave_cb = _make_drag_handlers(p_frame, p_canvas, item)
                 p_canvas.tag_bind("photo", "<Button-1>", start_cb)
                 p_canvas.tag_bind("photo", "<B1-Motion>", drag_cb)
                 p_canvas.tag_bind("photo", "<ButtonRelease-1>", end_cb)
-                p_canvas.tag_bind("photo", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
-                p_canvas.tag_bind("photo", "<Leave>", lambda e, c=p_canvas: c.config(cursor=""))
+                p_canvas.bind("<Enter>", enter_cb)
+                p_canvas.bind("<Leave>", leave_cb)
             else:
                 p_canvas.tag_bind("photo", "<Button-1>", lambda e, p=img_path: self.open_full_image(p))
                 p_canvas.tag_bind("photo", "<Enter>", lambda e, c=p_canvas: c.config(cursor="hand2"))
