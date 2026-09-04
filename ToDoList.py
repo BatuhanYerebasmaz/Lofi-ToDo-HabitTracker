@@ -71,7 +71,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from PIL import Image, ImageDraw, ImageTk, ImageOps
+from PIL import Image, ImageDraw, ImageTk, ImageOps, ImageGrab
 import pystray
 
 try:
@@ -1985,17 +1985,42 @@ class DailyNoteTooltip:
             self.current_ds = None
 
 
-_POLAROID_CACHE = {}
-_MAX_POLAROID_CACHE = 32
+_BASE_POLAROID_CACHE = {}
+_MAX_BASE_POLAROID_CACHE = 40
+
+_ROTATED_POLAROID_CACHE = {}
+_MAX_ROTATED_POLAROID_CACHE = 120
+
+_STICKER_BASE_CACHE = {}
+_MAX_STICKER_BASE_CACHE = 80
 
 
-def _add_to_polaroid_cache(key, val):
-    if len(_POLAROID_CACHE) >= _MAX_POLAROID_CACHE:
+def _add_to_lru_cache(cache_dict, max_size, key, val):
+    if len(cache_dict) >= max_size:
         try:
-            _POLAROID_CACHE.pop(next(iter(_POLAROID_CACHE)))
+            cache_dict.pop(next(iter(cache_dict)))
         except Exception:
             pass
-    _POLAROID_CACHE[key] = val
+    cache_dict[key] = val
+
+
+def get_base_sticker_pil(fpath, stk_size):
+    """Çıkartmayı diskten sadece 1 kez okuyup istenen boyuta ölçekleyerek önbelleğe alır."""
+    key = (fpath, stk_size)
+    if key in _STICKER_BASE_CACHE:
+        return _STICKER_BASE_CACHE[key]
+    if not (fpath and os.path.exists(fpath)):
+        return None
+    try:
+        pil_img = Image.open(fpath).convert("RGBA")
+        w, h = pil_img.size
+        new_w = stk_size
+        new_h = max(20, int(stk_size * (h / max(1, w))))
+        pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        _add_to_lru_cache(_STICKER_BASE_CACHE, _MAX_STICKER_BASE_CACHE, key, pil_img)
+        return pil_img
+    except Exception:
+        return None
 
 
 def draw_washi_tape_polygon(img, center, length=32, thickness=10, angle_deg=45, color=(238, 185, 145, 215)):
@@ -2020,62 +2045,75 @@ def create_tilted_polaroid(img_path, width=125, height=95, angle=0):
         mtime = os.path.getmtime(img_path) if os.path.exists(img_path) else 0
     except Exception:
         mtime = 0
-    cache_key = (img_path, width, height, angle, mtime)
-    if cache_key in _POLAROID_CACHE:
-        return _POLAROID_CACHE[cache_key]
 
-    border_lr = 7
-    border_top = 7
-    border_bottom = 20
+    rot_cache_key = (img_path, width, height, angle, mtime)
+    if rot_cache_key in _ROTATED_POLAROID_CACHE:
+        return _ROTATED_POLAROID_CACHE[rot_cache_key]
 
-    card_w = width + (border_lr * 2)
-    card_h = height + border_top + border_bottom
-
-    # Beyaz Polaroid tabanı (RGBA)
-    polaroid = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
-    draw = ImageDraw.Draw(polaroid)
-
-    try:
-        with Image.open(img_path) as raw_img:
-            raw_img = ImageOps.exif_transpose(raw_img)
-            # En boy oranını (Aspect Ratio) bozmadan merkezden akıllı kırpma ve keskin Lanczos ölçekleme
-            user_img = ImageOps.fit(raw_img, (width, height), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
-            if user_img.mode != "RGBA":
-                user_img = user_img.convert("RGBA")
-        polaroid.paste(user_img, (border_lr, border_top))
-    except Exception:
-        draw.rectangle([border_lr, border_top, border_lr + width, border_top + height], fill=(220, 220, 220, 255))
-
-    # İnce fotoğraf kenarlığı
-    draw.rectangle([border_lr - 1, border_top - 1, border_lr + width, border_top + height],
-                   outline=(210, 210, 210, 255), width=1)
-
-    # Washi Tape Efekti: Belli bir büyük boyuta ulaşınca (width >= 210) 4 köşeye açılı bantlar ekle!
-    if width >= 210:
-        tape_len = max(26, int(width * 0.20))
-        tape_th = max(7, int(width * 0.055))
-        offset = max(8, int(width * 0.065))
-        tape_color = (238, 185, 145, 215)
-        # Sol Üst
-        polaroid = draw_washi_tape_polygon(polaroid, (offset, offset), length=tape_len, thickness=tape_th, angle_deg=-45, color=tape_color)
-        # Sağ Üst
-        polaroid = draw_washi_tape_polygon(polaroid, (card_w - offset, offset), length=tape_len, thickness=tape_th, angle_deg=45, color=tape_color)
-        # Sol Alt
-        polaroid = draw_washi_tape_polygon(polaroid, (offset, card_h - offset), length=tape_len, thickness=tape_th, angle_deg=45, color=tape_color)
-        # Sağ Alt
-        polaroid = draw_washi_tape_polygon(polaroid, (card_w - offset, card_h - offset), length=tape_len, thickness=tape_th, angle_deg=-45, color=tape_color)
+    base_cache_key = (img_path, width, height, mtime)
+    if base_cache_key in _BASE_POLAROID_CACHE:
+        base_polaroid = _BASE_POLAROID_CACHE[base_cache_key]
     else:
-        tape_w = max(24, int(width * 0.25))
-        tape_h = max(8, int(width * 0.07))
-        draw.rectangle([(card_w - tape_w) // 2, 0, (card_w + tape_w) // 2, tape_h],
-                       fill=(238, 185, 145, 200))
+        border_lr = 7
+        border_top = 7
+        border_bottom = 20
+
+        card_w = width + (border_lr * 2)
+        card_h = height + border_top + border_bottom
+
+        # Beyaz Polaroid tabanı (RGBA)
+        polaroid = Image.new("RGBA", (card_w, card_h), (255, 255, 255, 255))
+        draw = ImageDraw.Draw(polaroid)
+
+        try:
+            with Image.open(img_path) as raw_img:
+                raw_img = ImageOps.exif_transpose(raw_img)
+                # En boy oranını (Aspect Ratio) bozmadan merkezden akıllı kırpma ve keskin Lanczos ölçekleme
+                user_img = ImageOps.fit(raw_img, (width, height), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+                if user_img.mode != "RGBA":
+                    user_img = user_img.convert("RGBA")
+            if user_img.mode == "RGBA":
+                polaroid.paste(user_img, (border_lr, border_top), mask=user_img)
+            else:
+                polaroid.paste(user_img, (border_lr, border_top))
+        except Exception:
+            draw.rectangle([border_lr, border_top, border_lr + width, border_top + height], fill=(220, 220, 220, 255))
+
+        # İnce fotoğraf kenarlığı
+        draw.rectangle([border_lr - 1, border_top - 1, border_lr + width, border_top + height],
+                       outline=(210, 210, 210, 255), width=1)
+
+        # Washi Tape Efekti: Belli bir büyük boyuta ulaşınca (width >= 210) 4 köşeye açılı bantlar ekle!
+        if width >= 210:
+            tape_len = max(26, int(width * 0.20))
+            tape_th = max(7, int(width * 0.055))
+            offset = max(8, int(width * 0.065))
+            tape_color = (238, 185, 145, 215)
+            # Sol Üst
+            polaroid = draw_washi_tape_polygon(polaroid, (offset, offset), length=tape_len, thickness=tape_th, angle_deg=-45, color=tape_color)
+            # Sağ Üst
+            polaroid = draw_washi_tape_polygon(polaroid, (card_w - offset, offset), length=tape_len, thickness=tape_th, angle_deg=45, color=tape_color)
+            # Sol Alt
+            polaroid = draw_washi_tape_polygon(polaroid, (offset, card_h - offset), length=tape_len, thickness=tape_th, angle_deg=45, color=tape_color)
+            # Sağ Alt
+            polaroid = draw_washi_tape_polygon(polaroid, (card_w - offset, card_h - offset), length=tape_len, thickness=tape_th, angle_deg=-45, color=tape_color)
+        else:
+            tape_w = max(24, int(width * 0.25))
+            tape_h = max(8, int(width * 0.07))
+            draw.rectangle([(card_w - tape_w) // 2, 0, (card_w + tape_w) // 2, tape_h],
+                           fill=(238, 185, 145, 200))
+
+        base_polaroid = polaroid
+        _add_to_lru_cache(_BASE_POLAROID_CACHE, _MAX_BASE_POLAROID_CACHE, base_cache_key, base_polaroid)
 
     # Yumuşak kenarlı doğal açı döndürmesi (Bicubic antialiasing)
     if angle != 0:
-        polaroid = polaroid.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+        final_polaroid = base_polaroid.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+    else:
+        final_polaroid = base_polaroid
 
-    _add_to_polaroid_cache(cache_key, polaroid)
-    return polaroid
+    _add_to_lru_cache(_ROTATED_POLAROID_CACHE, _MAX_ROTATED_POLAROID_CACHE, rot_cache_key, final_polaroid)
+    return final_polaroid
 
 
 STICKERS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "stickers")
@@ -2102,6 +2140,18 @@ STICKER_CATALOG = {
         ("Ginkgo Yaprağı", "nature_ginkgo.png"),
         ("Bonsai Ağacı", "nature_bonsai.png"),
         ("Papatya Buketi", "nature_bouquet.png"),
+        ("Utangaç Papatya", "nature_blushing_daisy.png"),
+        ("Mor Orkide", "nature_orchid.png"),
+        ("Narin Menekşe", "nature_violet.png"),
+        ("Eğrelti Otu", "nature_fern.png"),
+        ("Mavi Çan Çiçeği", "nature_bluebell.png"),
+        ("Minik Terraryum", "nature_terrarium.png"),
+        ("Çiçekli Sulama Kabı", "nature_watering_can.png"),
+        ("Sarı Nergis", "nature_daffodil.png"),
+        ("Çilek Çiçeği", "nature_strawberry_blossom.png"),
+        ("Yeşil Sarmaşık", "nature_ivy.png"),
+        ("Bahçe Filizi", "nature_garden_sprout.png"),
+        ("Kırmızı Gelincik", "nature_poppy.png"),
     ],
     "☕ Cozy Kafe, Tatlılar & Meyveler": [
         ("Sıcak Kahve", "cafe_coffee.png"),
@@ -2124,6 +2174,18 @@ STICKER_CATALOG = {
         ("Patates Kızartması", "cafe_fries.png"),
         ("Dilim Pizza", "cafe_pizza.png"),
         ("Limon Dilimi", "fruit_lemon.png"),
+        ("Üç Top Dondurma", "cafe_ice_cream.png"),
+        ("Çilekli Cupcake", "cafe_cupcake.png"),
+        ("Makaron Kulesi", "cafe_macaron_stack.png"),
+        ("Sevimli Onigiri", "cafe_onigiri.png"),
+        ("Sıcak Ramen", "cafe_ramen.png"),
+        ("Taiyaki Waffle", "cafe_taiyaki.png"),
+        ("Üç Renkli Dango", "cafe_dango.png"),
+        ("Kare Çikolata", "cafe_chocolate.png"),
+        ("Çiçekli Çaydanlık", "cafe_flowering_teapot.png"),
+        ("Tarçınlı Rulo", "cafe_cinnamon_roll.png"),
+        ("Şirin Kiraz", "fruit_cherry.png"),
+        ("Portakal Dilimi", "fruit_orange.png"),
     ],
     "🐾 Sevimli Hayvan Dostlar": [
         ("Uyuyan Kedi", "doodle_cat.png"),
@@ -2146,6 +2208,18 @@ STICKER_CATALOG = {
         ("Neşeli Corgi", "animal_corgi.png"),
         ("Sarı Ördek", "animal_duck.png"),
         ("Uykucu Baykuş", "animal_owl.png"),
+        ("Mandalinalı Kapibara", "animal_capybara.png"),
+        ("Golden Yavru Köpek", "animal_puppy.png"),
+        ("Zarif Flamingo", "animal_flamingo.png"),
+        ("Yıldızlı Şirin Fok", "animal_star_seal.png"),
+        ("Kutudan Bakan Kedi", "animal_box_cat.png"),
+        ("Kırmızı Panda", "animal_red_panda.png"),
+        ("Minik Bukalemun", "animal_chameleon.png"),
+        ("Bal Arısı", "animal_honeybee.png"),
+        ("Sevimli Denizatı", "animal_seahorse.png"),
+        ("Neşeli Yunus", "animal_dolphin.png"),
+        ("Pofuduk Koyun", "animal_sheep.png"),
+        ("Minik Kelebek", "animal_butterfly.png"),
     ],
     "📚 Çalışma, Kırtasiye & Lofi": [
         ("Antika Defter", "study_book.png"),
@@ -2168,6 +2242,18 @@ STICKER_CATALOG = {
         ("Büyüteç", "study_magnifier.png"),
         ("Pastel Sırt Çantası", "study_backpack.png"),
         ("Akustik Gitar", "study_guitar.png"),
+        ("Gözlüklü Kitap Kulesi", "study_book_stack.png"),
+        ("Şirin Kalemtraş", "study_pencil_sharpener.png"),
+        ("Pastel Fosforlu Kalem", "study_highlighter.png"),
+        ("Masaüstü Takvim", "study_desk_calendar.png"),
+        ("Mantar Pano & Not", "study_corkboard.png"),
+        ("Sevimli Zımba", "study_stapler.png"),
+        ("Mürekkep Hokkası", "study_ink_bottle.png"),
+        ("Renkli Kalemlik", "study_gel_pens.png"),
+        ("Pastel Hesap Makinesi", "study_calculator.png"),
+        ("Nostaljik Daktilo", "study_typewriter.png"),
+        ("Eskiz Defteri", "study_sketchbook.png"),
+        ("Lofi Masa Radyosu", "study_speaker.png"),
     ],
     "🌙 Gece, Kozmik & Sevimli Çizimler": [
         ("Gece Şapkalı Ay", "cosmic_moon.png"),
@@ -2190,8 +2276,137 @@ STICKER_CATALOG = {
         ("Pastel Kar Tanesi", "cosmic_snowflake.png"),
         ("Müzik Notaları", "doodle_music_note.png"),
         ("Hediye Kutusu", "doodle_gift.png"),
+        ("Çiçek Taçlı Hayalet", "magic_ghost.png"),
+        ("Neşeli Güneş", "magic_sun.png"),
+        ("Yıldızlı Büyücü Şapkası", "magic_wizard_hat.png"),
+        ("Galaksi Kristal Küre", "magic_crystal_ball.png"),
+        ("Sihirli Yıldız Değnek", "magic_star_wand.png"),
+        ("Kanatlı Aşk Mektubu", "doodle_winged_letter.png"),
+        ("Fikir Ampulü", "cosmic_idea_sprout.png"),
+        ("Uyku Battaniyesi", "cozy_sleeping_blanket.png"),
+        ("Kuyruklu Yıldız", "cosmic_comet.png"),
+        ("Şişede Galaksi", "cosmic_galaxy_bottle.png"),
+        ("Hilal & Yıldızlar", "cosmic_crescent_cluster.png"),
+        ("Sihirli Tarot Kartı", "magic_tarot_card.png"),
+    ],
+    "🎮 Retro Oyun, Hobi & Nostalji": [
+        ("Pastel Game Boy", "retro_gameboy.png"),
+        ("Pikap & Vinil Plak", "retro_record_player.png"),
+        ("Kulaklıklı Kasetçalar", "retro_walkman.png"),
+        ("Tamagotchi Bebek", "retro_tamagotchi.png"),
+        ("Pastel Paten", "retro_roller_skates.png"),
+        ("Atari Kabini", "retro_arcade.png"),
+        ("Zeka Küpü", "retro_rubik.png"),
+        ("Sakız Makinesi", "retro_gumball.png"),
+        ("Antika Radyo", "retro_radio.png"),
+        ("Pembe Kaset", "retro_pink_cassette.png"),
+        ("Mini Konsol", "retro_console.png"),
+        ("Mor CD Çalar", "retro_discman.png"),
+        ("Atari Kumandası", "retro_joystick.png"),
+        ("Çilekli Soda Kutusu", "retro_soda_can.png"),
+        ("Polaroid Şipşak", "retro_polaroid_photo.png"),
+        ("Retro Tüplü Televizyon", "retro_crt_tv.png"),
+        ("Kasetli Video Kamera", "retro_camcorder.png"),
+        ("Lav Lambası", "retro_lava_lamp.png"),
+        ("Floppy Disket", "retro_floppy_disk.png"),
+        ("Çevirmeli Telefon", "retro_rotary_phone.png"),
+        ("Retro Çalar Saat", "retro_alarm_clock.png"),
+        ("Kaset Rafı", "retro_cassette_case.png"),
+        ("Masaüstü Pinball", "retro_pinball.png"),
+        ("VHS Kaset", "retro_vhs_tape.png"),
+        ("Nostaljik Mikrofon", "retro_vintage_mic.png"),
+        ("Retro Güneş Gözlüğü", "retro_vintage_sunglasses.png"),
+        ("Ahşap Yoyo", "retro_yoyo.png"),
+        ("Antika Vantilatör", "retro_vintage_fan.png"),
+        ("Nostaljik Çizgi Roman", "retro_comic_book.png"),
+        ("Plak & Albüm Kılıfı", "retro_vinyl_sleeve.png"),
+        ("Kış Kar Küresi", "retro_snowglobe.png"),
+        ("Kibrit Kutusu", "retro_matchbox.png"),
+    ],
+    "🏕️ Seyahat, Kamp & Doğa Maceraları": [
+        ("Orman Çadırı", "travel_tent.png"),
+        ("Kamp Ateşi & Marşmelov", "travel_campfire.png"),
+        ("Vosvos Karavan", "travel_camper_van.png"),
+        ("Sıcak Hava Balonu", "travel_hot_air_balloon.png"),
+        ("Vintage Seyahat Bavulu", "travel_suitcase.png"),
+        ("Pirinç Pusula", "travel_compass.png"),
+        ("Sıcak Termos Kupa", "travel_thermos.png"),
+        ("Karlı Dağ Zirveleri", "travel_mountains.png"),
+        ("Gezgin Dürbünü", "travel_binoculars.png"),
+        ("Pirinç Kamp Feneri", "travel_lantern.png"),
+        ("Origami Kağıt Gemi", "travel_paper_boat.png"),
+        ("Sepetli Şehir Bisikleti", "travel_bicycle.png"),
+        ("Gezgin Sırt Çantası", "travel_backpack.png"),
+        ("Mor Kamp Feneri", "travel_purple_lantern.png"),
+        ("Çiçekli Pembe Bisiklet", "travel_flower_bicycle.png"),
+        ("Kamp Tenceresi", "travel_camp_pot.png"),
+        ("Katlanır Kamp Sandalyesi", "travel_camp_chair.png"),
+        ("Yürüyüş Botları", "travel_hiking_boots.png"),
+        ("Kamp Baltası & Odun", "travel_axe_wood.png"),
+        ("Emaye Kamp Kupası", "travel_camp_mug.png"),
+        ("Sevimli Deniz Feneri", "travel_lighthouse.png"),
+        ("Ahşap Patika Tabelası", "travel_trail_sign.png"),
+        ("Ağaç Arası Hamak", "travel_hammock.png"),
+        ("İncili Deniz Kabuğu", "travel_seashell.png"),
+        ("Palmiyeli Minik Ada", "travel_palm_island.png"),
+        ("Seyahat Haritası", "travel_travel_map.png"),
+        ("Pasaport & Uçak Bileti", "travel_passport.png"),
+        ("Ahşap Kano & Kürek", "travel_canoe.png"),
+        ("Hasır Güneş Şapkası", "travel_sunhat.png"),
+        ("Kamp Matarası", "travel_canteen.png"),
+        ("Nostaljik Can Simidi", "travel_lifebuoy.png"),
+        ("Gazlı Kamp Feneri", "travel_gas_lamp.png"),
     ]
 }
+
+
+_STICKER_THUMB_CACHE = {}
+
+
+def _get_sticker_thumb(fname, size=(44, 44)):
+    """Çıkartma küçük resimlerini bellekte önbellekleyerek diski tekrar tekrar okumayı engeller."""
+    key = (fname, size)
+    if key in _STICKER_THUMB_CACHE:
+        return _STICKER_THUMB_CACHE[key]
+    fpath = os.path.join(STICKERS_DIR, fname)
+    if not (fpath and os.path.exists(fpath)):
+        return None
+    try:
+        pil_img = Image.open(fpath).convert("RGBA")
+        thumb_pil = pil_img.resize((size[0] * 2, size[1] * 2), Image.Resampling.BILINEAR)
+        ctk_img = ctk.CTkImage(light_image=thumb_pil, dark_image=thumb_pil, size=size)
+        _STICKER_THUMB_CACHE[key] = ctk_img
+        return ctk_img
+    except Exception:
+        return None
+
+
+def preload_sticker_thumbnails():
+    """Tüm çıkartma küçük resimlerini arka planda önbelleğe alarak çıkartma albümünü anında açılır hale getirir."""
+    def _worker():
+        try:
+            for cat_items in STICKER_CATALOG.values():
+                for _, fname in cat_items:
+                    key = (fname, (44, 44))
+                    if key not in _STICKER_THUMB_CACHE:
+                        fpath = os.path.join(STICKERS_DIR, fname)
+                        if os.path.exists(fpath):
+                            try:
+                                pil_img = Image.open(fpath).convert("RGBA")
+                                thumb_pil = pil_img.resize((88, 88), Image.Resampling.BILINEAR)
+                                ctk_img = ctk.CTkImage(light_image=thumb_pil, dark_image=thumb_pil, size=(44, 44))
+                                _STICKER_THUMB_CACHE[key] = ctk_img
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+
+# Arka planda çıkartma küçük resimlerini önceden belleğe yükle
+preload_sticker_thumbnails()
 
 
 class DailyNoteModal(ctk.CTkToplevel):
@@ -2284,8 +2499,8 @@ class DailyNoteModal(ctk.CTkToplevel):
         except Exception:
             pass
 
+        self._deactivate_windows_window_header_manipulation = True
         self.geometry(f"670x730+{max(20, px)}+{max(20, py)}")
-        self.resizable(False, False)
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(fg_color=self.theme["bg"])
@@ -2298,17 +2513,31 @@ class DailyNoteModal(ctk.CTkToplevel):
         self._polaroid_win_ids = []
         self._sticker_win_ids = []
         self._sticker_popup = None
+        self._sticker_drawer = None
+        self._sticker_side_panel = None
+        self._selected_sticker_cat = list(STICKER_CATALOG.keys())[0]
+        self._stk_tab_buttons = {}
         self.note_font = tkfont.Font(family="Segoe Print", size=12)
         self._cursor_visible = True
+        self._save_debounce_job = None
+        self._render_text_job = None
+        self._last_display_info = []
 
         self.setup_ui()
         self.after(5, self.apply_round_corners)
         self.after(50, self.apply_round_corners)
         self.after(200, self.apply_round_corners)
-        self.bind("<Map>", lambda e: self.apply_round_corners())
+        self.bind("<Map>", lambda e: self.apply_round_corners() if e.widget == self else None)
+        self.bind("<Escape>", self._on_escape)
+        if hasattr(self, "textbox"):
+            self.textbox.bind("<Escape>", self._on_escape)
 
         if self.is_today:
             self.bind("<Control-s>", lambda e: self.save_note())
+            self.bind("<Control-S>", lambda e: self.save_note())
+            self.bind("<Control-v>", self.handle_paste)
+            self.bind("<Control-V>", self.handle_paste)
+            self.bind("<<Paste>>", self.handle_paste)
             self.setup_drag_drop()
             self.after(20, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
             self.after(100, lambda: self.textbox.focus_set() if hasattr(self, "textbox") else None)
@@ -2321,10 +2550,9 @@ class DailyNoteModal(ctk.CTkToplevel):
     def apply_round_corners(self):
         """Pencere ve tüm üst taşıyıcı katmanlarının köşelerini Windows GDI ile pürüzsüz yuvarlatır."""
         try:
-            w = self.winfo_width()
-            h = self.winfo_height()
-            if w <= 10 or h <= 10:
-                w, h = 670, 730
+            target_w = 1050 if getattr(self, "_sticker_panel_open", False) else 670
+            w = target_w
+            h = 730
             r = 36  # Yumuşak kavis yarıçapı
             child_hwnd = self.winfo_id()
             if child_hwnd:
@@ -2332,9 +2560,6 @@ class DailyNoteModal(ctk.CTkToplevel):
                 p_hwnd = ctypes.windll.user32.GetParent(child_hwnd)
                 if p_hwnd:
                     hwnds_to_round.append(p_hwnd)
-                a_hwnd = ctypes.windll.user32.GetAncestor(child_hwnd, 2)
-                if a_hwnd and a_hwnd not in hwnds_to_round:
-                    hwnds_to_round.append(a_hwnd)
 
                 for h_item in hwnds_to_round:
                     try:
@@ -2368,12 +2593,13 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.spiral_canvas.pack(side="left", fill="y", padx=(0, 2))
         self.draw_spiral_rings()
 
-        # 2. Tek Yapraklı Defter Sayfası
+        # 2. Tek Yapraklı Defter Sayfası (Sabit 616px genişlik: Albüm açılsa/kapansa da asla esnemez)
         self.page = ctk.CTkFrame(
             self.outer_frame, fg_color=paper_bg, corner_radius=16,
-            border_width=2, border_color=paper_border
+            border_width=2, border_color=paper_border, width=616
         )
-        self.page.pack(side="left", fill="both", expand=True)
+        self.page.pack_propagate(False)
+        self.page.pack(side="left", fill="y", expand=False)
         page = self.page
 
         # Sayfa İçi Üst Başlık
@@ -2402,7 +2628,7 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         if self.is_today:
             ctk.CTkButton(
-                action_box, text="📷 + Fotoğraf Ekle", width=120, height=28, corner_radius=8,
+                action_box, text="📷 + Fotoğraf (Ctrl+V)", width=135, height=28, corner_radius=8,
                 fg_color=theme.get("btn_primary", theme.get("btn_settings", "#B0D2AF")),
                 hover_color=theme.get("btn_primary_hover", theme.get("btn_settings_hover", "#92BF91")),
                 text_color=theme["text"], font=ctk.CTkFont(size=10, weight="bold"),
@@ -2431,10 +2657,10 @@ class DailyNoteModal(ctk.CTkToplevel):
         margin_line.pack(fill="x", padx=16, pady=(4, 4))
 
         # 3. Kaydırılabilir Scrapbook Canvas Tuvali
-        canvas_container = tk.Frame(page, bg=paper_bg)
-        canvas_container.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+        self.canvas_container = tk.Frame(page, bg=paper_bg)
+        self.canvas_container.pack(fill="both", expand=True, padx=8, pady=(0, 4))
 
-        self.canvas = tk.Canvas(canvas_container, bg=paper_bg, highlightthickness=0)
+        self.canvas = tk.Canvas(self.canvas_container, bg=paper_bg, highlightthickness=0)
         self.canvas.pack(side="left", fill="both", expand=True)
 
         # Defter Çizgilerini Çiz
@@ -2452,7 +2678,11 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.textbox.bind("<KeyPress>", self._on_text_key)
         self.textbox.bind("<KeyRelease>", self._on_text_key)
-        self.textbox.bind("<Button-1>", lambda e: self.after(1, self.render_canvas_text))
+        self.textbox.bind("<Button-1>", lambda e: self._schedule_render_text(1))
+        if self.is_today:
+            self.textbox.bind("<Control-v>", self.handle_paste)
+            self.textbox.bind("<Control-V>", self.handle_paste)
+            self.textbox.bind("<<Paste>>", self.handle_paste)
         # Tuval üzerine tıklandığında imleci tıklanan satır ve sütuna al, gerekirse otomatik yeni satır ekle
         def _on_canvas_click(event):
             if not self.is_today:
@@ -2462,30 +2692,38 @@ class DailyNoteModal(ctk.CTkToplevel):
             for cid in clicked:
                 tags.update(self.canvas.gettags(cid))
             if not (tags & {"polaroid_item", "sticker_item", "pol_ctrl", "stk_ctrl", "pol_del", "pol_rot", "stk_del", "stk_rot"}):
+                # Sayfaya boş tıklandığında önceki kontrol butonlarını gizle
+                self.canvas.delete("pol_ctrl")
+                self.canvas.delete("stk_ctrl")
                 self.textbox.focus_set()
                 try:
                     click_x = event.x
-                    click_y = event.y + self.canvas.canvasy(0)
+                    click_y = self.canvas.canvasy(event.y)
                     disp_line = max(0, int((click_y - 30) / 28))
 
-                    raw_text = self.textbox.get("1.0", "end-1c")
-                    raw_lines = raw_text.split("\n")
+                    display_info = getattr(self, "_last_display_info", [])
+                    if display_info and disp_line < len(display_info):
+                        line_str, r_idx, c_s, c_e = display_info[disp_line]
+                        # Tıklanan yatay konuma karşılık gelen karakter sütununu bul
+                        char_col = len(line_str)
+                        for c_idx in range(len(line_str) + 1):
+                            if 48 + self.note_font.measure(line_str[:c_idx]) >= click_x:
+                                char_col = c_idx
+                                break
+                        self.textbox.mark_set("insert", f"{r_idx + 1}.{c_s + char_col}")
+                    else:
+                        # Var olan metnin altındaki boş defter çizgilerine tıklandıysa
+                        raw_text = self.textbox.get("1.0", "end-1c")
+                        raw_lines = raw_text.split("\n")
+                        current_num_disp = len(display_info) if display_info else len(raw_lines)
+                        if disp_line >= current_num_disp:
+                            needed = disp_line - current_num_disp + 1
+                            self.textbox.insert("end", "\n" * needed)
+                            target_row = len(self.textbox.get("1.0", "end-1c").split("\n"))
+                            self.textbox.mark_set("insert", f"{target_row}.0")
+                        else:
+                            self.textbox.mark_set("insert", "end")
 
-                    if disp_line >= len(raw_lines):
-                        needed = disp_line - len(raw_lines) + 1
-                        self.textbox.insert("end", "\n" * needed)
-                        raw_lines = self.textbox.get("1.0", "end-1c").split("\n")
-
-                    target_row = disp_line + 1
-                    line_str = raw_lines[disp_line] if disp_line < len(raw_lines) else ""
-
-                    char_col = len(line_str)
-                    for c_idx in range(len(line_str) + 1):
-                        if 48 + self.note_font.measure(line_str[:c_idx]) >= click_x:
-                            char_col = c_idx
-                            break
-
-                    self.textbox.mark_set("insert", f"{target_row}.{char_col}")
                     self._cursor_visible = True
                     self.render_canvas_text()
                 except Exception:
@@ -2493,6 +2731,9 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         def _on_canvas_key(event):
             if not self.is_today:
+                return
+            if (getattr(event, "state", 0) & 4 and getattr(event, "keysym", "").lower() == "v") or getattr(event, "char", "") == "\x16":
+                self.handle_paste(event)
                 return
             self.textbox.focus_set()
             if event.char and ord(event.char) >= 32:
@@ -2513,22 +2754,31 @@ class DailyNoteModal(ctk.CTkToplevel):
 
         self.canvas.bind("<Button-1>", _on_canvas_click, add="+")
         self.canvas.bind("<Key>", _on_canvas_key)
+        if self.is_today:
+            for w in (self.canvas, self.page, self.outer_frame):
+                try:
+                    w.bind("<Control-v>", self.handle_paste)
+                    w.bind("<Control-V>", self.handle_paste)
+                    w.bind("<<Paste>>", self.handle_paste)
+                except Exception:
+                    pass
 
         # Fare Tekerleği ile Senkronize Kaydırma veya Fotoğraf / Sticker Boyutlandırma
         def _on_canvas_wheel(event):
             if not self.winfo_exists() or not hasattr(self, "canvas") or not self.canvas.winfo_exists():
                 return
 
-            # Çıkartma seçici penceresi (sticker popup) üzerindeyken ana defter tuvalini ASLA kaydırma!
-            if getattr(self, "_sticker_popup", None) and self._sticker_popup.winfo_ismapped():
+            # Çıkartma albümü sayfası üzerindeyken ana defter tuvalini ASLA kaydırma!
+            if getattr(self, "_sticker_panel_open", False) and getattr(self, "_sticker_side_panel", None):
+                side_p = self._sticker_side_panel
                 try:
                     w = getattr(event, "widget", None)
-                    if w and (w == self._sticker_popup or str(self._sticker_popup) in str(w)):
+                    if w and (w == side_p or str(side_p) in str(w)):
                         return
-                    sx1 = self._sticker_popup.winfo_rootx()
-                    sy1 = self._sticker_popup.winfo_rooty()
-                    sx2 = sx1 + self._sticker_popup.winfo_width()
-                    sy2 = sy1 + self._sticker_popup.winfo_height()
+                    sx1 = side_p.winfo_rootx()
+                    sy1 = side_p.winfo_rooty()
+                    sx2 = sx1 + side_p.winfo_width()
+                    sy2 = sy1 + side_p.winfo_height()
                     if sx1 <= event.x_root <= sx2 and sy1 <= event.y_root <= sy2:
                         return
                 except Exception:
@@ -2560,7 +2810,7 @@ class DailyNoteModal(ctk.CTkToplevel):
             elif getattr(event, "num", 0) == 5:
                 self.canvas.yview_scroll(1, "units")
 
-        for w in (self, self.canvas, self.page, self.outer_frame, canvas_container):
+        for w in (self, self.canvas, self.page, self.outer_frame, self.canvas_container):
             try:
                 w.bind("<MouseWheel>", _on_canvas_wheel)
                 w.bind("<Button-4>", _on_canvas_wheel)
@@ -2569,20 +2819,20 @@ class DailyNoteModal(ctk.CTkToplevel):
                 pass
 
         # 4. Alt Bilgi Çubuğu (Sol: Sticker Butonu · Sağ: Kelime Sayacı)
-        stats_bar = ctk.CTkFrame(page, fg_color="transparent")
-        stats_bar.pack(fill="x", padx=16, pady=(0, 2))
+        self.stats_bar = ctk.CTkFrame(page, fg_color="transparent")
+        self.stats_bar.pack(fill="x", padx=16, pady=(0, 2))
 
         if self.is_today:
             self.sticker_btn = ctk.CTkButton(
-                stats_bar, text="🎨 + Çıkartmalar", width=125, height=26, corner_radius=13,
+                self.stats_bar, text="🎨 + Çıkartmalar", width=130, height=26, corner_radius=13,
                 fg_color=paper_border, hover_color=theme.get("btn_primary", "#B0D2AF"),
                 text_color=text_color, font=ctk.CTkFont(size=11, weight="bold"),
-                command=self.toggle_sticker_popup
+                command=self.toggle_sticker_side_panel
             )
             self.sticker_btn.pack(side="left")
 
         self.stat_label = ctk.CTkLabel(
-            stats_bar, text="✍️ 0 kelime · 0 karakter",
+            self.stats_bar, text="✍️ 0 kelime · 0 karakter",
             font=ctk.CTkFont(size=10), text_color=sub_text_color
         )
         self.stat_label.pack(side="right")
@@ -2608,97 +2858,346 @@ class DailyNoteModal(ctk.CTkToplevel):
                     command=self.delete_note
                 ).pack(side="right")
 
-    def toggle_sticker_popup(self):
-        """Sol altta sevimli çıkartma seçici penceresini açar/kapatır."""
-        play_button_sound()
-        if self._sticker_popup and self._sticker_popup.winfo_ismapped():
-            self._sticker_popup.place_forget()
-            return
+            self.after(15, self._prebuild_sticker_side_panel)
 
-        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
+    def _prebuild_sticker_side_panel(self):
+        """Uygulama açıldıktan hemen sonra arka planda çıkartma albümünü sessizce hazır eder."""
+        try:
+            if not getattr(self, "_sticker_side_panel", None) and self.winfo_exists():
+                self._build_sticker_side_panel()
+        except Exception:
+            pass
+
+    def toggle_sticker_side_panel(self):
+        """Defterin sağından açılan şık, ikinci sayfa (Çıkartma Albümü) modunu açar/kapatır."""
+        play_button_sound()
+        theme = self.theme
         paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
         text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
 
-        if not self._sticker_popup:
-            self._sticker_popup = ctk.CTkFrame(
-                self.page, width=390, height=330, corner_radius=16,
-                border_width=2, border_color=paper_border, fg_color=paper_bg
+        try:
+            if getattr(self, "_sticker_panel_open", False):
+                # 1. Albüm sayfasını anında gizle
+                self._sticker_panel_open = False
+                if getattr(self, "_sticker_side_panel", None):
+                    self._sticker_side_panel.pack_forget()
+
+                # 2. Pencereyi tek sayfa boyutuna (670px) küçült ve köşeleri yuvarlat
+                orig_x = getattr(self, "_sticker_panel_prev_x", self.winfo_x())
+                cur_y = self.winfo_y()
+                self.geometry(f"670x730+{orig_x}+{cur_y}")
+                self.apply_round_corners()
+
+                if hasattr(self, "sticker_btn") and self.sticker_btn.winfo_exists():
+                    self.sticker_btn.configure(
+                        text="🎨 + Çıkartmalar",
+                        fg_color=paper_border,
+                        text_color=text_color
+                    )
+                return
+
+            # İkinci sayfayı aç ve pencereyi çift sayfa moduna (990px) genişlet
+            if not getattr(self, "_sticker_side_panel", None):
+                self._build_sticker_side_panel()
+
+            self._sticker_panel_open = True
+
+            screen_w = self.winfo_screenwidth()
+            cur_x = self.winfo_x()
+            cur_y = self.winfo_y()
+            self._sticker_panel_prev_x = cur_x
+            target_w = 1050
+            new_x = cur_x
+            # Ekranın sağından dışarı taşmaması için güvenli x ayarı
+            if cur_x + target_w > screen_w - 20:
+                new_x = max(20, screen_w - target_w - 20)
+
+            # Albüm sayfasını defterin hemen sağına yerleştir ve pencereyi tek adımda genişlet (flicker olmadan)
+            self._sticker_side_panel.pack(side="left", fill="y", padx=(10, 0))
+            self.geometry(f"{target_w}x730+{new_x}+{cur_y}")
+            self.apply_round_corners()
+
+            if hasattr(self, "sticker_btn") and self.sticker_btn.winfo_exists():
+                self.sticker_btn.configure(
+                    text="🎨 Çıkartmaları Kapat",
+                    fg_color=theme.get("btn_primary", "#B0D2AF"),
+                    text_color="#FFFFFF" if self.is_dark else theme.get("text", "#243026")
+                )
+            cur_cat = getattr(self, "_selected_sticker_cat", list(STICKER_CATALOG.keys())[0])
+            self._show_sticker_category_frame(cur_cat)
+        except Exception as e:
+            print(f"Sticker panel geçiş hatası: {e}")
+
+    def toggle_sticker_drawer(self):
+        """Geriye dönük uyumluluk için yan panele yönlendirir."""
+        self.toggle_sticker_side_panel()
+
+    def toggle_sticker_popup(self):
+        """Geriye dönük uyumluluk için yan panele yönlendirir."""
+        self.toggle_sticker_side_panel()
+
+    def _build_sticker_side_panel(self):
+        """Defterin sağında açılan, ana günlüğü asla daraltmayan ferah Çıkartma Albümü sayfası."""
+        theme = self.theme
+        paper_bg = "#FAF4EB" if not self.is_dark else "#221C18"
+        paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
+        text_color = "#2E241E" if not self.is_dark else "#F5EDE4"
+        sub_text_color = "#7D6B5D" if not self.is_dark else "#A8988B"
+        margin_color = "#F0C4B4" if not self.is_dark else "#543C30"
+
+        self._stk_cat_frames = {}
+
+        # Dış frame: sol sayfa (self.page) gibi 2px kenarlıklı, ferah 365px genişliğinde
+        self._sticker_side_panel = ctk.CTkFrame(
+            self.outer_frame, width=365, corner_radius=16,
+            border_width=2, border_color=paper_border, fg_color=paper_bg
+        )
+        self._sticker_side_panel.pack_propagate(False)
+
+        # 1. Başlık ve Kapatma Butonu
+        p_head = ctk.CTkFrame(self._sticker_side_panel, fg_color="transparent")
+        p_head.pack(fill="x", padx=14, pady=(12, 4))
+
+        title_left = ctk.CTkFrame(p_head, fg_color="transparent")
+        title_left.pack(side="left")
+
+        ctk.CTkLabel(
+            title_left, text="🎨  Çıkartma Albümü",
+            font=ctk.CTkFont(family="Georgia", size=14, weight="bold"),
+            text_color=text_color
+        ).pack(side="left")
+
+        total_stickers = sum(len(items) for items in STICKER_CATALOG.values())
+        self._stk_count_badge = ctk.CTkLabel(
+            title_left, text=f"{total_stickers} adet",
+            font=ctk.CTkFont(size=9, weight="bold"),
+            text_color=sub_text_color, fg_color=paper_border,
+            corner_radius=6, padx=6, pady=1
+        )
+        self._stk_count_badge.pack(side="left", padx=(8, 0))
+
+        ctk.CTkButton(
+            p_head, text="✕", width=26, height=26, corner_radius=13,
+            fg_color=paper_border, hover_color=theme.get("btn_danger", "#EF4444"),
+            text_color=sub_text_color, font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.toggle_sticker_side_panel
+        ).pack(side="right")
+
+        # İnce Defter Çizgisi (Sol sayfadakiyle tam hizalı)
+        ctk.CTkFrame(self._sticker_side_panel, height=1, fg_color=margin_color).pack(fill="x", padx=14, pady=(4, 6))
+
+        # 2. Kategori Butonları (Geniş ve Rahat 2 Satır)
+        tabs_frame = ctk.CTkFrame(self._sticker_side_panel, fg_color="transparent")
+        tabs_frame.pack(fill="x", padx=8, pady=(0, 4))
+
+        row1 = ctk.CTkFrame(tabs_frame, fg_color="transparent")
+        row1.pack(fill="x", pady=(0, 2))
+        row2 = ctk.CTkFrame(tabs_frame, fg_color="transparent")
+        row2.pack(fill="x")
+
+        row1_cats = [
+            ("🌸 Doğa", "🌸 Çiçek & Doğa"),
+            ("☕ Kafe & Tatlı", "☕ Cozy Kafe, Tatlılar & Meyveler"),
+            ("🐾 Hayvanlar", "🐾 Sevimli Hayvan Dostlar"),
+        ]
+        row2_cats = [
+            ("🎮 Retro", "🎮 Retro Oyun, Hobi & Nostalji"),
+            ("🏕️ Kamp", "🏕️ Seyahat, Kamp & Doğa Maceraları"),
+            ("📚 Lofi", "📚 Çalışma, Kırtasiye & Lofi"),
+            ("🌙 Büyülü", "🌙 Gece, Kozmik & Sevimli Çizimler"),
+        ]
+
+        self._stk_tab_buttons = {}
+
+        for short_lbl, full_name in row1_cats:
+            btn = ctk.CTkButton(
+                row1, text=short_lbl, width=0, height=26, corner_radius=10,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                command=lambda fn=full_name: (play_button_sound(), self._select_sticker_category(fn))
             )
+            btn.pack(side="left", fill="x", expand=True, padx=2)
+            self._stk_tab_buttons[full_name] = btn
 
-            p_head = ctk.CTkFrame(self._sticker_popup, fg_color="transparent")
-            p_head.pack(fill="x", padx=12, pady=(8, 4))
+        for short_lbl, full_name in row2_cats:
+            btn = ctk.CTkButton(
+                row2, text=short_lbl, width=0, height=26, corner_radius=10,
+                font=ctk.CTkFont(size=10, weight="bold"),
+                command=lambda fn=full_name: (play_button_sound(), self._select_sticker_category(fn))
+            )
+            btn.pack(side="left", fill="x", expand=True, padx=2)
+            self._stk_tab_buttons[full_name] = btn
 
-            ctk.CTkLabel(
-                p_head, text="🎨  El Çizimi Çıkartma Paleti",
-                font=ctk.CTkFont(family="Georgia", size=12, weight="bold"),
-                text_color=text_color
-            ).pack(side="left")
+        # 3. Kaydırılabilir Çıkartma Izgarası (5 Sütun, Ferah ve Boydan Boya)
+        self._stk_scroll = ctk.CTkScrollableFrame(
+            self._sticker_side_panel, fg_color="transparent"
+        )
+        self._stk_scroll.pack(fill="both", expand=True, padx=8, pady=(4, 2))
 
-            ctk.CTkButton(
-                p_head, text="✕", width=22, height=22, corner_radius=11,
-                fg_color="transparent", hover_color=paper_border,
-                text_color=text_color, font=ctk.CTkFont(size=10, weight="bold"),
-                command=lambda: (play_button_sound(), self._sticker_popup.place_forget())
-            ).pack(side="right")
+        # 4. Alt Bilgi Çubuğu
+        footer_frame = ctk.CTkFrame(self._sticker_side_panel, fg_color="transparent", height=22)
+        footer_frame.pack(fill="x", padx=12, pady=(2, 8))
 
-            scroll_stk = ctk.CTkScrollableFrame(self._sticker_popup, fg_color="transparent", width=360, height=260)
-            scroll_stk.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self._stk_status_lbl = ctk.CTkLabel(
+            footer_frame,
+            text="💡 Yapıştırmak için tıkla · Boyut: fare tekeri",
+            font=ctk.CTkFont(size=9, slant="italic"),
+            text_color=sub_text_color, anchor="center"
+        )
+        self._stk_status_lbl.pack(fill="x")
 
-            for cat_name, items in STICKER_CATALOG.items():
-                cat_header = ctk.CTkFrame(scroll_stk, fg_color="transparent")
-                cat_header.pack(fill="x", padx=4, pady=(8, 2))
-                ctk.CTkLabel(
-                    cat_header, text=cat_name, font=ctk.CTkFont(size=11, weight="bold"),
-                    text_color=text_color
-                ).pack(side="left")
+        # İlk kategoriyi kur ve göster
+        self._select_sticker_category(self._selected_sticker_cat)
+        # Kalan kategorileri kullanıcı boşta dururken arkada kademeli olarak hazırla
+        self.after(50, self._schedule_prebuild_other_categories)
 
-                current_row_frame = ctk.CTkFrame(scroll_stk, fg_color="transparent")
-                current_row_frame.pack(fill="x", padx=4, pady=2)
+    def _schedule_prebuild_other_categories(self):
+        """Kullanıcı arayüzü boştayken kalan kategorileri arkada sessizce önceden oluşturur."""
+        try:
+            if not (self.winfo_exists() and hasattr(self, "_stk_scroll") and self._stk_scroll.winfo_exists()):
+                return
+            cats_to_build = [c for c in STICKER_CATALOG.keys() if c not in getattr(self, "_stk_cat_frames", {})]
+            if not cats_to_build:
+                return
+            next_cat = cats_to_build[0]
+            self._build_category_frame(next_cat)
+            if len(cats_to_build) > 1:
+                self.after(35, self._schedule_prebuild_other_categories)
+        except Exception:
+            pass
 
-                col = 0
-                for name, fname in items:
-                    fpath = os.path.join(STICKERS_DIR, fname)
-                    if os.path.exists(fpath):
-                        try:
-                            pil_thumb = Image.open(fpath).convert("RGBA")
-                            ctk_img = ctk.CTkImage(light_image=pil_thumb, dark_image=pil_thumb, size=(40, 40))
-                            self._sticker_thumbs.append(ctk_img)
+    def _build_category_frame(self, cat_name):
+        """Belirtilen kategorinin buton ızgarasını oluşturur ve önbelleğe alır (görünür yapmaz)."""
+        if not hasattr(self, "_stk_scroll") or not self._stk_scroll.winfo_exists():
+            return None
+        if not hasattr(self, "_stk_cat_frames"):
+            self._stk_cat_frames = {}
+        if cat_name in self._stk_cat_frames:
+            return self._stk_cat_frames[cat_name]
 
-                            btn = ctk.CTkButton(
-                                current_row_frame, image=ctk_img, text="", width=48, height=48,
-                                corner_radius=10, fg_color="transparent", hover_color=paper_border,
-                                command=lambda f=fname: self.add_sticker(f)
-                            )
-                            btn.pack(side="left", padx=4, pady=3)
-                            col += 1
-                            if col % 5 == 0 and col < len(items):
-                                current_row_frame = ctk.CTkFrame(scroll_stk, fg_color="transparent")
-                                current_row_frame.pack(fill="x", padx=4, pady=2)
-                        except Exception as err:
-                            print(f"Sticker yükleme hatası: {err}")
+        cat_frame = ctk.CTkFrame(self._stk_scroll, fg_color="transparent")
+        self._stk_cat_frames[cat_name] = cat_frame
 
-        self._sticker_popup.place(x=16, y=max(10, self.page.winfo_height() - 365))
-        self._sticker_popup.lift()
+        paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
+        items_to_show = STICKER_CATALOG.get(cat_name, [])
+
+        if not items_to_show:
+            empty_lbl = ctk.CTkLabel(
+                cat_frame, text="Çıkartma yok 😿",
+                font=ctk.CTkFont(size=11, slant="italic"),
+                text_color="#7D6B5D" if not self.is_dark else "#A8988B"
+            )
+            empty_lbl.pack(pady=30)
+            return cat_frame
+
+        cols = 4
+        current_row = None
+
+        def _make_hover(stk_name):
+            def _enter(e):
+                if hasattr(self, "_stk_status_lbl") and self._stk_status_lbl.winfo_exists():
+                    self._stk_status_lbl.configure(text=f"✨ {stk_name} — Deftere ekle")
+            def _leave(e):
+                if hasattr(self, "_stk_status_lbl") and self._stk_status_lbl.winfo_exists():
+                    self._stk_status_lbl.configure(text="💡 Yapıştırmak için tıkla · Boyut: fare tekeri")
+            return _enter, _leave
+
+        for idx, (name, fname) in enumerate(items_to_show):
+            if idx % cols == 0:
+                current_row = ctk.CTkFrame(cat_frame, fg_color="transparent")
+                current_row.pack(fill="x", pady=2)
+
+            ctk_img = _get_sticker_thumb(fname, size=(44, 44))
+            if not ctk_img:
+                continue
+
+            btn = ctk.CTkButton(
+                current_row, image=ctk_img, text="", width=62, height=62,
+                corner_radius=12, fg_color="transparent", hover_color=paper_border,
+                command=lambda f=fname: self.add_sticker(f)
+            )
+            btn.pack(side="left", padx=5, pady=2)
+
+            on_enter, on_leave = _make_hover(name)
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+
+        return cat_frame
+
+    def _select_sticker_category(self, cat_name):
+        """Seçilen kategoriyi aktif hale getirir ve sekmeleri günceller."""
+        if not hasattr(self, "_stk_cat_frames"):
+            self._stk_cat_frames = {}
+
+        self._selected_sticker_cat = cat_name
+        theme = self.theme
+        paper_border = "#E6D7C3" if not self.is_dark else "#382D25"
+        sub_text_color = "#7D6B5D" if not self.is_dark else "#A8988B"
+
+        # Sekme butonlarının renklerini güncelle
+        for cn, btn in getattr(self, "_stk_tab_buttons", {}).items():
+            if cn == cat_name:
+                btn.configure(
+                    fg_color=theme.get("btn_primary", "#B0D2AF"),
+                    hover_color=theme.get("btn_primary_hover", "#92BF91"),
+                    text_color="#FFFFFF" if self.is_dark else theme.get("text", "#243026")
+                )
+            else:
+                btn.configure(
+                    fg_color=paper_border,
+                    hover_color=theme.get("btn_primary", "#B0D2AF"),
+                    text_color=sub_text_color
+                )
+
+        if hasattr(self, "_stk_count_badge") and self._stk_count_badge.winfo_exists():
+            cnt = len(STICKER_CATALOG.get(cat_name, []))
+            self._stk_count_badge.configure(text=f"{cnt} adet")
+
+        self._show_sticker_category_frame(cat_name)
+
+    def _show_sticker_category_frame(self, cat_name):
+        """Aktif kategorinin ızgarasını önbellekten anında gösterir."""
+        if not hasattr(self, "_stk_scroll") or not self._stk_scroll.winfo_exists():
+            return
+
+        if not hasattr(self, "_stk_cat_frames"):
+            self._stk_cat_frames = {}
+
+        # Zaten bu kategori ekranda açık ve çizili mi?
+        if cat_name in self._stk_cat_frames and self._stk_cat_frames[cat_name].winfo_ismapped():
+            return
+
+        # Diğer tüm açık kategori frame'lerini gizle
+        for c_frame in self._stk_cat_frames.values():
+            if c_frame.winfo_ismapped():
+                c_frame.pack_forget()
+
+        # Frame henüz oluşturulmadıysa oluştur ve pack et
+        cat_frame = self._build_category_frame(cat_name)
+        if cat_frame:
+            cat_frame.pack(fill="both", expand=True)
+            try:
+                self._stk_scroll._parent_canvas.yview_moveto(0)
+            except Exception:
+                pass
 
     def add_sticker(self, sticker_file):
         """Sayfaya yeni bir el çizimi çıkartma ekler."""
         play_button_sound()
         try:
-            cur_y = int(self.canvas.yview()[0] * 2000) + 180
+            cur_y = int(self.canvas.yview()[0] * 2000) + 160
         except Exception:
-            cur_y = 180
+            cur_y = 160
 
+        # Sol sayfadaki günlüğün ortasına (x=260) yerleştir
         self.note_stickers.append({
             "file": sticker_file,
             "x": 260,
-            "y": max(80, cur_y),
+            "y": max(60, cur_y),
             "size": 75,
             "angle": random.choice([-6, -3, 0, 3, 6])
         })
         self._save_state_quietly()
         self.render_canvas_stickers()
-        if self._sticker_popup and self._sticker_popup.winfo_ismapped():
-            self._sticker_popup.lift()
 
     def render_canvas_stickers(self):
         """Serbest sürüklenebilir çıkartmaları doğrudan Canvas üzerine 100% saf şeffaflıkla (alpha) çizer."""
@@ -2715,16 +3214,16 @@ class DailyNoteModal(ctk.CTkToplevel):
             fpath = os.path.join(STICKERS_DIR, s_file) if s_file else ""
             if fpath and os.path.exists(fpath):
                 try:
-                    pil_img = Image.open(fpath).convert("RGBA")
                     stk_size = s.get("size", 75)
-                    w, h = pil_img.size
-                    new_w = stk_size
-                    new_h = max(20, int(stk_size * (h / max(1, w))))
-                    pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    base_img = get_base_sticker_pil(fpath, stk_size)
+                    if not base_img:
+                        continue
 
                     ang = s.get("angle", 0)
                     if ang != 0:
-                        pil_img = pil_img.rotate(-ang, expand=True, resample=Image.Resampling.BICUBIC)
+                        pil_img = base_img.rotate(-ang, expand=True, resample=Image.Resampling.BICUBIC)
+                    else:
+                        pil_img = base_img
 
                     tk_img = ImageTk.PhotoImage(pil_img)
                     self._sticker_cache.append(tk_img)
@@ -2850,15 +3349,12 @@ class DailyNoteModal(ctk.CTkToplevel):
                 new_angle -= 360
             s["angle"] = round(new_angle, 1)
 
-            if fpath and os.path.exists(fpath):
-                pil_img = Image.open(fpath).convert("RGBA")
-                sz = s.get("size", 75)
-                w, h = pil_img.size
-                new_w = sz
-                new_h = max(20, int(sz * (h / max(1, w))))
-                pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            base_img = get_base_sticker_pil(fpath, s.get("size", 75))
+            if base_img:
                 if s["angle"] != 0:
-                    pil_img = pil_img.rotate(-s["angle"], expand=True, resample=Image.Resampling.BICUBIC)
+                    pil_img = base_img.rotate(-s["angle"], expand=True, resample=Image.Resampling.BICUBIC)
+                else:
+                    pil_img = base_img
                 tk_img = ImageTk.PhotoImage(pil_img)
                 self._active_rot_tk_img = tk_img
                 self.canvas.itemconfigure(tag_name, image=tk_img)
@@ -2952,11 +3448,25 @@ class DailyNoteModal(ctk.CTkToplevel):
         for tag in ("pol_del", "pol_rot"):
             self.canvas.tag_bind(tag, "<Enter>", lambda e: self.canvas.config(cursor="hand2" if "rot" not in str(e.widget) else "exchange"))
 
+    def _schedule_render_text(self, delay=15):
+        if getattr(self, "_render_text_job", None) is not None:
+            try:
+                self.after_cancel(self._render_text_job)
+            except Exception:
+                pass
+        self._render_text_job = self.after(delay, self._render_canvas_text_debounced)
+
+    def _render_canvas_text_debounced(self):
+        self._render_text_job = None
+        self.render_canvas_text()
+
     def _on_text_key(self, event):
         if not self.is_today:
             return
+        if (getattr(event, "state", 0) & 4 and getattr(event, "keysym", "").lower() == "v") or getattr(event, "char", "") == "\x16":
+            return
         self._cursor_visible = True
-        self.after(1, self.render_canvas_text)
+        self._schedule_render_text(15)
 
     def _blink_cursor(self):
         try:
@@ -2998,6 +3508,10 @@ class DailyNoteModal(ctk.CTkToplevel):
             # Genişliği aşan satırlarda boşlukları bozmadan sarmala
             start = 0
             while start < len(r_line):
+                if self.note_font.measure(r_line[start:]) <= max_w:
+                    display_info.append((r_line[start:], row_idx, start, len(r_line)))
+                    break
+
                 end = start + 1
                 last_space = -1
                 while end <= len(r_line) and self.note_font.measure(r_line[start:end]) <= max_w:
@@ -3016,6 +3530,8 @@ class DailyNoteModal(ctk.CTkToplevel):
                     chunk_end = max(start + 1, end - 1)
                     display_info.append((r_line[start:chunk_end], row_idx, start, chunk_end))
                     start = chunk_end
+
+        self._last_display_info = display_info
 
         line_h = 28
         start_y = 30
@@ -3073,9 +3589,11 @@ class DailyNoteModal(ctk.CTkToplevel):
     def _update_scroll_region(self):
         """Metin, fotoğraflar ve çıkartmaların konumuna göre sayfa kaydırma sınırını dinamik ayarlar."""
         try:
-            full_text = self.textbox.get("1.0", "end-1c")
-            raw_lines = full_text.split("\n")
-            num_lines = max(1, len(raw_lines))
+            if getattr(self, "_last_display_info", None):
+                num_lines = max(1, len(self._last_display_info))
+            else:
+                full_text = self.textbox.get("1.0", "end-1c")
+                num_lines = max(1, len(full_text.split("\n")))
             txt_h = max(30, num_lines * 28 + 20)
 
             max_y = max(2400, txt_h + 80)
@@ -3352,6 +3870,132 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.render_canvas_polaroids()
         self.lift()
         self.focus_force()
+        if hasattr(self, "textbox"):
+            self.textbox.focus_set()
+
+    def _import_clipboard_image(self, pil_image, drop_pos=None):
+        """Panodan (clipboard) kopyalanan resmi notes_media'ya kaydeder ve tuvale polaroid olarak ekler."""
+        os.makedirs(NOTES_MEDIA_DIR, exist_ok=True)
+        try:
+            pil_image = ImageOps.exif_transpose(pil_image)
+            max_dim = 1920
+            if pil_image.width > max_dim or pil_image.height > max_dim:
+                pil_image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        except Exception:
+            pass
+
+        unique_name = f"{self.ds}_{int(time.time()*1000)}_{random.randint(100,999)}.png"
+        dest_path = os.path.join(NOTES_MEDIA_DIR, unique_name)
+
+        try:
+            if pil_image.mode in ("RGBA", "RGB"):
+                pil_image.save(dest_path, format="PNG")
+            elif pil_image.mode in ("P", "PA", "1", "L", "LA"):
+                pil_image.convert("RGBA").save(dest_path, format="PNG")
+            else:
+                pil_image.convert("RGB").save(dest_path, format="PNG")
+        except Exception as e:
+            print(f"Pano resmi kaydedilemedi: {e}")
+            return False
+
+        x_pos, y_pos = None, None
+        if drop_pos:
+            x_pos = max(10, min(420, drop_pos[0]))
+            y_pos = max(10, drop_pos[1])
+
+        angle = self._ANGLES[len(self.note_images) % len(self._ANGLES)]
+        self.note_images.append({
+            "path": dest_path,
+            "x": x_pos,
+            "y": y_pos,
+            "width": 135,
+            "angle": angle
+        })
+
+        self._save_state_quietly()
+        self.render_canvas_polaroids()
+        self.lift()
+        self.focus_force()
+        if hasattr(self, "textbox"):
+            self.textbox.focus_set()
+        return True
+
+    def handle_paste(self, event=None):
+        """Pano (Clipboard) içeriğini akıllıca yapıştırır (Ctrl+V: Resim veya Metin)."""
+        if not self.is_today:
+            return "break"
+
+        # Çift tetiklemeyi önle (Debounce 250ms)
+        now = time.time()
+        if now - getattr(self, "_last_paste_time", 0) < 0.25:
+            return "break"
+        self._last_paste_time = now
+
+        # Fare imleci tuval üzerindeyse oraya yapıştır, değilse görünür alana veya varsayılan konuma yerleştir
+        paste_pos = None
+        try:
+            mx = self.canvas.winfo_pointerx() - self.canvas.winfo_rootx()
+            my = self.canvas.winfo_pointery() - self.canvas.winfo_rooty()
+            cw = self.canvas.winfo_width()
+            ch = self.canvas.winfo_height()
+            if 0 <= mx <= cw and 0 <= my <= ch:
+                paste_pos = (mx, int(self.canvas.canvasy(my)))
+            elif self.canvas.canvasy(0) > 30:
+                paste_pos = (280, int(self.canvas.canvasy(0) + 180))
+        except Exception:
+            paste_pos = None
+
+        # 1. Panoda doğrudan bir resim nesnesi var mı? (PrtScn, Ekran Alıntısı Aracı, Webden resim kopyalama vb.)
+        clip = None
+        try:
+            clip = ImageGrab.grabclipboard()
+        except Exception as e:
+            clip = None
+
+        if isinstance(clip, Image.Image):
+            play_button_sound()
+            self._import_clipboard_image(clip, drop_pos=paste_pos)
+            return "break"
+
+        # 2. Panoda dosya yöneticisinden kopyalanmış dosya listesi var mı? (Windows Explorer'dan Ctrl+C)
+        VALID_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".ico", ".tiff"}
+        if isinstance(clip, list):
+            img_files = [f for f in clip if isinstance(f, str) and os.path.isfile(f) and os.path.splitext(f)[1].lower() in VALID_EXTS]
+            if img_files:
+                play_button_sound()
+                self._import_image_files(img_files, drop_pos=paste_pos)
+                return "break"
+
+        # 3. Panodaki metni kontrol et
+        txt = None
+        try:
+            txt = self.clipboard_get()
+        except Exception:
+            txt = None
+
+        if txt:
+            # Metin bir veya birden fazla resim dosyasının yolu mu?
+            lines = [line.strip().strip('"').strip("'") for line in txt.splitlines() if line.strip()]
+            img_path_lines = [l for l in lines if os.path.isfile(l) and os.path.splitext(l)[1].lower() in VALID_EXTS]
+            if img_path_lines and len(img_path_lines) == len(lines):
+                play_button_sound()
+                self._import_image_files(img_path_lines, drop_pos=paste_pos)
+                return "break"
+
+            # Değilse normal metin yapıştırma (Defter çizgilerine ekle)
+            try:
+                try:
+                    self.textbox.delete("sel.first", "sel.last")
+                except Exception:
+                    pass
+                self.textbox.insert("insert", txt)
+                self._cursor_visible = True
+                self.render_canvas_text()
+            except Exception as e:
+                print(f"Metin yapıştırma hatası: {e}")
+            return "break"
+
+        return "break"
 
     def remove_image(self, img_path):
         target_item = None
@@ -3380,8 +4024,22 @@ class DailyNoteModal(ctk.CTkToplevel):
             except Exception:
                 webbrowser.open(img_path)
 
-    def _save_state_quietly(self):
-        """Kullanıcıyı rahatsız etmeden arka planda günlüğü kaydeder."""
+    def _flush_quiet_save(self):
+        """Varsa bekleyen debounced disk kaydını hemen gerçekleştirir."""
+        if getattr(self, "_save_debounce_job", None) is not None:
+            try:
+                self.after_cancel(self._save_debounce_job)
+            except Exception:
+                pass
+            self._save_debounce_job = None
+            try:
+                self.parent.save_data()
+            except Exception as e:
+                print(f"Diske kayıt hatası: {e}")
+
+    def _save_state_quietly(self, immediate=False):
+        """Kullanıcıyı rahatsız etmeden arka planda günlüğü kaydeder.
+        Disk yazma maliyetini önlemek için varsayılan olarak 500ms debounce uygular."""
         try:
             curr_text = self.textbox.get("1.0", "end-1c")
             if curr_text.strip() or self.note_images or self.note_stickers:
@@ -3392,12 +4050,23 @@ class DailyNoteModal(ctk.CTkToplevel):
                 }
             else:
                 self.parent.daily_notes.pop(self.ds, None)
-            self.parent.save_data()
+
+            if immediate:
+                self._flush_quiet_save()
+                self.parent.save_data()
+            else:
+                if getattr(self, "_save_debounce_job", None) is not None:
+                    try:
+                        self.after_cancel(self._save_debounce_job)
+                    except Exception:
+                        pass
+                self._save_debounce_job = self.after(500, self._flush_quiet_save)
         except Exception as e:
             print(f"Sessiz kayıt hatası: {e}")
 
     def save_note(self):
         play_button_sound()
+        self._flush_quiet_save()
         curr_text = self.textbox.get("1.0", "end-1c")
         if curr_text.strip() or self.note_images or self.note_stickers:
             self.parent.daily_notes[self.ds] = {
@@ -3412,11 +4081,28 @@ class DailyNoteModal(ctk.CTkToplevel):
         self.parent.render_table()
         self.destroy()
 
+    def _on_escape(self, e=None):
+        if getattr(self, "_sticker_panel_open", False):
+            self.toggle_sticker_side_panel()
+            return "break"
+        else:
+            self.close_modal()
+            return "break"
+
     def close_modal(self):
         play_button_sound()
         self.destroy()
 
     def delete_note(self):
+        if not messagebox.askyesno("Notu Sil", "Bu günlüğe ait tüm notlar, fotoğraflar ve çıkartmalar kalıcı olarak silinecek.\n\nEmin misiniz?", parent=self):
+            return
+        if getattr(self, "_save_debounce_job", None) is not None:
+            try:
+                self.after_cancel(self._save_debounce_job)
+            except Exception:
+                pass
+            self._save_debounce_job = None
+
         for item in list(self.note_images):
             img_p = item.get("path") if isinstance(item, dict) else item
             try:
@@ -3435,6 +4121,19 @@ class DailyNoteModal(ctk.CTkToplevel):
     def destroy(self):
         if DailyNoteModal.CURRENT_INSTANCE is self:
             DailyNoteModal.CURRENT_INSTANCE = None
+        self._flush_quiet_save()
+        if hasattr(self, "_save_debounce_job") and self._save_debounce_job:
+            try:
+                self.after_cancel(self._save_debounce_job)
+            except Exception:
+                pass
+            self._save_debounce_job = None
+        if hasattr(self, "_render_text_job") and self._render_text_job:
+            try:
+                self.after_cancel(self._render_text_job)
+            except Exception:
+                pass
+            self._render_text_job = None
         if hasattr(self, "_blink_job") and self._blink_job:
             try:
                 self.after_cancel(self._blink_job)
@@ -3442,6 +4141,15 @@ class DailyNoteModal(ctk.CTkToplevel):
                 pass
             self._blink_job = None
         self._active_rot_tk_img = None
+        if hasattr(self, "_photo_cache"):
+            self._photo_cache.clear()
+        if hasattr(self, "_sticker_cache"):
+            self._sticker_cache.clear()
+        if hasattr(self, "_sticker_thumbs"):
+            self._sticker_thumbs.clear()
+        if hasattr(self, "_stk_cat_frames"):
+            self._stk_cat_frames.clear()
+        self._sticker_side_panel = None
         super().destroy()
 
 
@@ -4525,7 +5233,10 @@ class HabitTrackerApp(_AppBase):
                 pass
 
     def get_task_target(self, task_name):
-        return max(1, int(getattr(self, "task_targets", {}).get(task_name, 1)))
+        try:
+            return max(1, int(getattr(self, "task_targets", {}).get(task_name, 1)))
+        except (ValueError, TypeError):
+            return 1
 
     def get_task_val(self, date_obj, task_name):
         return self.records.get(date_obj.strftime("%Y-%m-%d"), {}).get(task_name, False)
@@ -5124,10 +5835,26 @@ class HabitTrackerApp(_AppBase):
             command=lambda: self.navigate_table_month(1))
         self.table_next_btn.pack(side="left", padx=(1, 3), pady=2)
 
-        self.table_canvas.bind("<Configure>", lambda e: self.render_table())
+        self.table_canvas.bind("<Configure>", self._on_table_configure)
         self.table_canvas.bind("<Button-1>", self.on_table_click)
         self.table_canvas.bind("<Button-3>", self.on_table_right_click)
         self.table_canvas.bind("<Motion>", self.on_table_motion)
+
+    def _on_table_configure(self, event):
+        new_size = (event.width, event.height)
+        if getattr(self, "_last_table_size", None) == new_size:
+            return
+        self._last_table_size = new_size
+        if getattr(self, "_table_render_job", None) is not None:
+            try:
+                self.after_cancel(self._table_render_job)
+            except Exception:
+                pass
+        self._table_render_job = self.after(30, self._render_table_debounced)
+
+    def _render_table_debounced(self):
+        self._table_render_job = None
+        self.render_table()
 
     def open_settings(self):
         play_button_sound()
@@ -5151,7 +5878,9 @@ class HabitTrackerApp(_AppBase):
             self.current_monday = self.today - datetime.timedelta(days=self.today.weekday())
             self.selected_monday = self.current_monday
             self.week_dates = [self.current_monday + datetime.timedelta(days=i) for i in range(7)]
+            self.check_streak_freeze()
             self.render_table()
+            self.update_progress()
             self.update_charts()
 
         month_name = TURKISH_MONTHS.get(now.month, "")
@@ -6088,6 +6817,11 @@ class HabitTrackerApp(_AppBase):
         days = 0
         check_date = self.today - datetime.timedelta(days=1)
         for _ in range(30):
+            ds = check_date.strftime("%Y-%m-%d")
+            day_rec = self.records.get(ds)
+            # Görev bu tarihte henüz mevcut değildi veya o gün hiç kayıt tutulmamış: seriyi durdur
+            if day_rec is None or task_name not in day_rec:
+                break
             if self.get_task_state(check_date, task_name):
                 # Görev o gün yapılmış/tamamlanmış, aksatma serisi sonlandı
                 break
@@ -6178,7 +6912,6 @@ class HabitTrackerApp(_AppBase):
             self.active_popups[task_name] = popup
 
         self.settings["last_ai_notification_time"] = time.time()
-        self.save_data()
 
     def check_ai_notifications(self):
         """Her görevin kendi bağımsız zamanı geldiğinde aralıklı ve rastgele bildirim atmasını denetler."""
